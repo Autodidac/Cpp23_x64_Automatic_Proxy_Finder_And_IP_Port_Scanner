@@ -726,19 +726,49 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (g_btn_proxy_load) MoveWindow(g_btn_proxy_load, proxy_left + 160 + 90 + 8 + 55, proxy_actions_top - 2, 50, proxy_btn_height, TRUE);
 
         // Port management children
-        int port_left = margin + column_width + col_gap + GROUP_PADDING;
-        int port_top = manage_top + GROUP_PADDING + 2;
-        int port_inner_width = column_width - (GROUP_PADDING * 2);
+        RECT ports_group_rc{};
+        if (g_grp_ports) {
+            GetClientRect(g_grp_ports, &ports_group_rc);
+            MapWindowPoints(g_grp_ports, h, reinterpret_cast<POINT*>(&ports_group_rc), 2);
+        }
+
+        int port_left = ports_group_rc.left + GROUP_PADDING;
+        int port_top = ports_group_rc.top + GROUP_PADDING + 2;
+        int port_right = ports_group_rc.right - GROUP_PADDING;
+        int port_bottom = ports_group_rc.bottom - GROUP_PADDING;
+        int port_inner_width = port_right - port_left;
+
         int ports_list_top = port_top + line_height;
-        int ports_list_height = 120;
-        int ports_button_top = ports_list_top + ports_list_height + 4;
-        int port_entry_top = ports_list_top + ports_list_height + 6 + line_height + 10;
+        int vertical_gap = 8;
+        int ports_button_height = ctrl_height + 2;
+        int ports_entry_height = ctrl_height;
+
+        int available_height = port_bottom - ports_list_top;
+        int min_list_height = 60;
+        int ports_list_height = available_height - (ports_button_height + ports_entry_height + (vertical_gap * 2));
+        if (ports_list_height < min_list_height) ports_list_height = min_list_height;
+
+        int ports_button_top = ports_list_top + ports_list_height + vertical_gap;
+        int port_entry_top = ports_button_top + ports_button_height + vertical_gap;
+
+        int max_entry_top = port_bottom - ports_entry_height;
+        if (port_entry_top > max_entry_top) {
+            port_entry_top = max_entry_top;
+            ports_button_top = port_entry_top - vertical_gap - ports_button_height;
+            if (ports_button_top < ports_list_top + vertical_gap) ports_button_top = ports_list_top + vertical_gap;
+            ports_list_height = ports_button_top - vertical_gap - ports_list_top;
+            if (ports_list_height < min_list_height) {
+                ports_list_height = min_list_height;
+                ports_button_top = ports_list_top + ports_list_height + vertical_gap;
+                port_entry_top = ports_button_top + ports_button_height + vertical_gap;
+            }
+        }
 
         if (g_lst_ports) MoveWindow(g_lst_ports, port_left, ports_list_top, port_inner_width, ports_list_height, TRUE);
-        if (g_btn_common_ports) MoveWindow(g_btn_common_ports, port_left, ports_button_top, 110, ctrl_height + 2, TRUE);
+        if (g_btn_common_ports) MoveWindow(g_btn_common_ports, port_left, ports_button_top, 110, ports_button_height, TRUE);
         if (g_edt_ports) MoveWindow(g_edt_ports, port_left + 50, port_entry_top - 2, 80, ctrl_height, TRUE);
-        if (g_btn_ports_add) MoveWindow(g_btn_ports_add, port_left + 135, port_entry_top - 2, 45, ctrl_height + 2, TRUE);
-        if (g_btn_ports_remove) MoveWindow(g_btn_ports_remove, port_left + 185, port_entry_top - 2, 45, ctrl_height + 2, TRUE);
+        if (g_btn_ports_add) MoveWindow(g_btn_ports_add, port_left + 135, port_entry_top - 2, 45, ports_button_height, TRUE);
+        if (g_btn_ports_remove) MoveWindow(g_btn_ports_remove, port_left + 185, port_entry_top - 2, 45, ports_button_height, TRUE);
 
         int scan_height = 74;
         if (g_grp_scan) MoveWindow(g_grp_scan, margin, top, content_width, scan_height, TRUE);

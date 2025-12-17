@@ -337,6 +337,7 @@ void test_proxies(HWND listbox, std::function<void(const std::string&)> log_cb) 
         if (targets.empty()) {
             log_cb("ERROR: No targets!");
             progress_cb(0, 1);
+            if (finish_cb) finish_cb();
             return;
         }
 

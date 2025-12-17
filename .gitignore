@@ -33,3 +33,7 @@
 
 x64/*
 .vs/*
+
+build-msvc/.vs/
+
+build-msvc/

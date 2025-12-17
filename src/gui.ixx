@@ -332,6 +332,12 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         CreateWindowA("STATIC", "Proxies:", WS_CHILD | WS_VISIBLE, 10, row_y, 60, 22, h, NULL, hinst, NULL);
         g_lst_proxy = CreateWindowA("LISTBOX", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
             10, row_y + CONTROL_Y_OFFSET + ROW_SPACING, 200, 85, h, (HMENU)20, hinst, NULL);
+
+        g_edt_proxy_range = CreateWindowA("EDIT", "1000", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+            250, row_y + CONTROL_Y_OFFSET + 40 + ROW_SPACING, 40, 25, h, NULL, hinst, NULL);
+        g_btn_proxy_find = CreateWindowA("BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            300, row_y + CONTROL_Y_OFFSET + 40 + ROW_SPACING, 85, 25, h, (HMENU)29, hinst, NULL);
+
         g_edt_proxy_test = CreateWindowA("EDIT", "", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
             10, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 140, 25, h, NULL, hinst, NULL);
         g_btn_proxy_add = CreateWindowA("BUTTON", "Add", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -344,10 +350,7 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             340, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, (HMENU)27, hinst, NULL);
         g_btn_proxy_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             395, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, (HMENU)28, hinst, NULL);
-        g_edt_proxy_range = CreateWindowA("EDIT", "1000", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            450, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, NULL, hinst, NULL);
-        g_btn_proxy_find = CreateWindowA("BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            500, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 90, 25, h, (HMENU)29, hinst, NULL);
+
 
         // ROW 4: PORTS LISTBOX (same row_y as proxies)
         CreateWindowA("STATIC", "Ports:", WS_CHILD | WS_VISIBLE, 455, row_y, 45, 22, h, NULL, hinst, NULL);

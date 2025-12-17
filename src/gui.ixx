@@ -42,6 +42,7 @@ export namespace gui
     inline HWND g_lbl_proxy_header = nullptr, g_lbl_proxy_range = nullptr;
     inline HWND g_lbl_proxy_input = nullptr, g_lbl_proxy_scan = nullptr;
     inline HWND g_lbl_ports_header = nullptr, g_lbl_port_label = nullptr;
+    inline HWND g_lbl_target_count = nullptr, g_lbl_target_threads = nullptr, g_lbl_target_delay = nullptr, g_lbl_target_file = nullptr;
 
     inline HWND g_grp_info = nullptr, g_grp_targets = nullptr, g_grp_proxies = nullptr, g_grp_ports = nullptr;
     inline HWND g_grp_output = nullptr;
@@ -64,6 +65,8 @@ export namespace gui
     void preview_random_targets(int count, const std::vector<uint16_t>& ports);
     void find_proxies();
     void start_scan();
+    void layout_controls(HWND h, HINSTANCE hinst, bool creating);
+    bool handle_command(int id);
     LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l);
 
     void disable_controls() {
@@ -103,6 +106,198 @@ export namespace gui
         EnableWindow(g_edt_delay, TRUE);
         EnableWindow(g_btn_stop, FALSE);
         update_progress(0, 1);
+    }
+
+    struct UiMetrics {
+        int margin = 12;
+        int section_spacing = 12;
+        int row_spacing = 10;
+        int col_gap = 12;
+        int line_height = 22;
+        int ctrl_height = 24;
+        int content_width = 0;
+        int column_width = 0;
+        int client_height = 0;
+    };
+
+    struct RowLayout {
+        int y{};
+        int spacing{};
+        int take(int height) {
+            int current = y;
+            y += height + spacing;
+            return current;
+        }
+    };
+
+    struct PortLayout {
+        int left{};
+        int inner_width{};
+        int list_label_top{};
+        int list_top{};
+        int list_height{};
+        int load_top{};
+        int load_width{};
+        int port_row_top{};
+        int label_width{};
+        int button_width{};
+        int button_height{};
+        int input_width{};
+        int entry_height{};
+        int hgap{};
+    };
+
+    struct ProxyLayout {
+        int left{};
+        int top{};
+        int inner_width{};
+        int list_label_top{};
+        int list_top{};
+        int list_height{};
+        int range_row_top{};
+        int proxy_row_top{};
+        int actions_top{};
+        int hgap{};
+        int button_width{};
+        int button_height{};
+        int small_button_width{};
+        int range_label_width{};
+        int range_input_left{};
+        int range_input_width{};
+        int find_left{};
+        int find_width{};
+        int proxy_label_width{};
+        int proxy_input_left{};
+        int proxy_input_width{};
+        int add_left{};
+        int remove_left{};
+        int scan_label_width{};
+        int scan_left{};
+        int save_left{};
+        int load_left{};
+    };
+
+    UiMetrics calculate_metrics(HWND h) {
+        UiMetrics metrics{};
+        HDC dc = GetDC(h);
+        if (dc) {
+            TEXTMETRICA tm{};
+            if (GetTextMetricsA(dc, &tm)) {
+                metrics.line_height = std::max(18, static_cast<int>(tm.tmHeight + tm.tmExternalLeading));
+                metrics.ctrl_height = metrics.line_height + 2;
+                metrics.section_spacing = std::max(12, metrics.line_height / 2);
+                metrics.row_spacing = std::max(8, metrics.line_height / 2);
+            }
+            ReleaseDC(h, dc);
+        }
+
+        RECT rc{};
+        GetClientRect(h, &rc);
+        metrics.client_height = rc.bottom - rc.top;
+        metrics.content_width = (rc.right - rc.left) - (metrics.margin * 2);
+        metrics.column_width = (metrics.content_width - metrics.col_gap) / 2;
+        return metrics;
+    }
+
+    int compute_header_height(const UiMetrics& metrics) {
+        return (metrics.line_height * 2) + (GROUP_PADDING * 2);
+    }
+
+    int compute_target_height(const UiMetrics& metrics) {
+        int rows = 3;
+        return (GROUP_PADDING * 2) + (metrics.ctrl_height * rows) + (metrics.row_spacing * 2) + metrics.line_height;
+    }
+
+    int compute_manage_height(const UiMetrics& metrics) {
+        int desired_list_height = std::max(metrics.line_height * 6, 120);
+        int button_stack = metrics.ctrl_height * 3;
+        int spacing_stack = metrics.row_spacing * 3;
+        return (GROUP_PADDING * 2) + metrics.line_height + desired_list_height + button_stack + spacing_stack;
+    }
+
+    int compute_min_output_height(const UiMetrics& metrics) {
+        return std::max(metrics.line_height * 6, 150);
+    }
+
+    PortLayout compute_port_layout(const RECT& group_rc, const UiMetrics& metrics) {
+        PortLayout layout{};
+        layout.left = group_rc.left + GROUP_PADDING;
+        int right = group_rc.right - GROUP_PADDING;
+        int inner_top = group_rc.top + GROUP_PADDING + 2;
+        int inner_bottom = group_rc.bottom - GROUP_PADDING;
+        layout.inner_width = right - layout.left;
+
+        layout.hgap = metrics.margin / 2;
+        layout.label_width = 50;
+        layout.button_width = 60;
+        layout.button_height = metrics.ctrl_height;
+        layout.entry_height = metrics.ctrl_height;
+
+        layout.input_width = layout.inner_width - layout.label_width - (layout.button_width * 2) - (layout.hgap * 2);
+        if (layout.input_width < 60) layout.input_width = 60;
+
+        int inner_height = inner_bottom - inner_top;
+        int list_height = inner_height - layout.button_height - layout.entry_height - (metrics.row_spacing * 2) - metrics.line_height;
+        if (list_height < metrics.line_height * 5) list_height = metrics.line_height * 5;
+
+        layout.load_width = layout.inner_width / 3;
+        if (layout.load_width < 110) layout.load_width = 110;
+        if (layout.load_width > layout.inner_width) layout.load_width = layout.inner_width;
+
+        RowLayout rows{ inner_top, metrics.row_spacing };
+        layout.list_label_top = rows.take(metrics.line_height + list_height);
+        layout.list_top = layout.list_label_top + metrics.line_height;
+        layout.list_height = list_height;
+        layout.load_top = rows.take(layout.button_height);
+        layout.port_row_top = rows.take(layout.entry_height);
+        return layout;
+    }
+
+    ProxyLayout compute_proxy_layout(const RECT& group_rc, const UiMetrics& metrics) {
+        ProxyLayout layout{};
+        layout.left = group_rc.left + GROUP_PADDING;
+        layout.top = group_rc.top + GROUP_PADDING + 2;
+        int right = group_rc.right - GROUP_PADDING;
+        int inner_bottom = group_rc.bottom - GROUP_PADDING;
+        layout.inner_width = right - layout.left;
+
+        layout.hgap = metrics.margin / 2;
+        layout.button_width = 90;
+        layout.button_height = metrics.ctrl_height;
+        layout.small_button_width = 50;
+        layout.range_label_width = 115;
+        layout.range_input_width = 60;
+        layout.proxy_label_width = 50;
+
+        int inner_height = inner_bottom - layout.top;
+        int list_height = inner_height - (layout.button_height * 3) - (metrics.row_spacing * 3) - metrics.line_height;
+        if (list_height < metrics.line_height * 5) list_height = metrics.line_height * 5;
+
+        RowLayout rows{ layout.top, metrics.row_spacing };
+        layout.list_label_top = rows.take(metrics.line_height + list_height);
+        layout.list_top = layout.list_label_top + metrics.line_height;
+        layout.list_height = list_height;
+        layout.range_row_top = rows.take(layout.button_height);
+        layout.proxy_row_top = rows.take(layout.button_height);
+        layout.actions_top = rows.take(layout.button_height);
+
+        layout.range_input_left = layout.left + layout.range_label_width + layout.hgap;
+        layout.find_left = layout.range_input_left + layout.range_input_width + layout.hgap;
+        layout.find_width = layout.inner_width - (layout.range_label_width + layout.hgap + layout.range_input_width + layout.hgap);
+        if (layout.find_width < 120) layout.find_width = 120;
+
+        layout.proxy_input_left = layout.left + layout.proxy_label_width + layout.hgap;
+        layout.proxy_input_width = layout.inner_width - layout.proxy_label_width - layout.hgap - (layout.button_width * 2) - (layout.hgap * 2);
+        if (layout.proxy_input_width < 140) layout.proxy_input_width = 140;
+        layout.add_left = layout.proxy_input_left + layout.proxy_input_width + layout.hgap;
+        layout.remove_left = layout.add_left + layout.button_width + layout.hgap;
+
+        layout.scan_label_width = layout.inner_width - (layout.button_width + layout.hgap + layout.small_button_width + layout.hgap + layout.small_button_width);
+        if (layout.scan_label_width < 140) layout.scan_label_width = 140;
+        layout.scan_left = layout.left + layout.scan_label_width + layout.hgap;
+        layout.save_left = layout.scan_left + layout.button_width + layout.hgap;
+        layout.load_left = layout.save_left + layout.small_button_width + layout.hgap;
+        return layout;
     }
 }
 
@@ -150,6 +345,308 @@ void gui::preview_random_targets(int count, const std::vector<uint16_t>& ports) 
     }
     if (count > 20) log_line("... and " + std::to_string(count - 20) + " more");
     log_line("---------------------------------------");
+}
+
+void gui::layout_controls(HWND hwnd, HINSTANCE hinst, bool creating) {
+    UiMetrics metrics = calculate_metrics(hwnd);
+
+    auto place = [&](HWND& handle, const char* cls, const char* text, DWORD style,
+        int x, int y, int w, int h, HMENU id = nullptr, DWORD ex_style = 0) {
+            if (handle) {
+                MoveWindow(handle, x, y, w, h, TRUE);
+            }
+            else if (creating) {
+                handle = CreateWindowExA(ex_style, cls, text, style,
+                    x, y, w, h, hwnd, id, hinst, NULL);
+            }
+        };
+
+    int top = metrics.margin;
+    int header_height = compute_header_height(metrics);
+    int header_text_height = header_height - (GROUP_PADDING * 2);
+
+    std::string section_header = app_version::title() + "  \r\n  Targets • Proxies • Ports • Output";
+    int info_left = metrics.margin + GROUP_PADDING;
+    place(g_grp_info, "STATIC", section_header.c_str(), WS_CHILD | WS_VISIBLE | SS_CENTER,
+        info_left, top, metrics.content_width - (GROUP_PADDING * 2), header_text_height);
+
+    top += header_height + metrics.section_spacing;
+
+    int target_height = compute_target_height(metrics);
+    place(g_grp_targets, "BUTTON", "Target Setup", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+        metrics.margin, top, metrics.content_width, target_height, nullptr);
+
+    int inner_left = metrics.margin + GROUP_PADDING;
+    int inner_top = top + GROUP_PADDING + 2;
+    int label_width = 95;
+    int input_left = inner_left + label_width + metrics.row_spacing;
+
+    place(g_lbl_target_count, "STATIC", "Target Count:", WS_CHILD | WS_VISIBLE,
+        inner_left, inner_top, label_width, metrics.line_height, nullptr);
+    place(g_edt_ips, "EDIT", "10", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+        input_left, inner_top - 2, 80, metrics.ctrl_height, nullptr);
+
+    int x = inner_left + (metrics.content_width / 3);
+    place(g_lbl_target_threads, "STATIC", "Threads:", WS_CHILD | WS_VISIBLE,
+        x, inner_top, 75, metrics.line_height, nullptr);
+    place(g_edt_threads, "EDIT", "2", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+        x + 78, inner_top - 2, 60, metrics.ctrl_height, nullptr);
+
+    x += metrics.content_width / 3;
+    place(g_lbl_target_delay, "STATIC", "Delay (ms):", WS_CHILD | WS_VISIBLE,
+        x, inner_top, 80, metrics.line_height, nullptr);
+    place(g_edt_delay, "EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+        x + 83, inner_top - 2, 70, metrics.ctrl_height, nullptr);
+
+    inner_top += metrics.line_height + metrics.row_spacing;
+    place(g_chk_random, "BUTTON", "Random IPs", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        inner_left, inner_top - 2, 110, metrics.ctrl_height, (HMENU)10);
+    if (creating) SendMessageA(g_chk_random, BM_SETCHECK, BST_CHECKED, 0);
+
+    place(g_lbl_target_file, "STATIC", "Target File:", WS_CHILD | WS_VISIBLE,
+        inner_left + 130, inner_top, 80, metrics.line_height, nullptr);
+    place(g_edt_path, "EDIT", "targets.txt", WS_CHILD | WS_VISIBLE | WS_BORDER,
+        inner_left + 215, inner_top - 2, 180, metrics.ctrl_height, nullptr);
+    place(g_btn_gen, "BUTTON", "Generate", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        inner_left + 400, inner_top - 2, 90, metrics.ctrl_height, (HMENU)2);
+    place(g_btn_load, "BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        inner_left + 495, inner_top - 2, 80, metrics.ctrl_height, (HMENU)3);
+    place(g_btn_save, "BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        inner_left + 580, inner_top - 2, 80, metrics.ctrl_height, (HMENU)4);
+
+    inner_top += metrics.line_height + metrics.row_spacing;
+    place(g_btn_scan, "BUTTON", "START SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
+        inner_left, inner_top - 2, 120, metrics.ctrl_height, (HMENU)5);
+    place(g_btn_stop, "BUTTON", "STOP SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        inner_left + 130, inner_top - 2, 120, metrics.ctrl_height, (HMENU)1);
+    if (creating) EnableWindow(g_btn_stop, FALSE);
+    place(g_btn_clear, "BUTTON", "Clear Log", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        inner_left + 260, inner_top - 2, 120, metrics.ctrl_height, (HMENU)6);
+
+    top += target_height + metrics.section_spacing;
+
+    int manage_height = compute_manage_height(metrics);
+    place(g_grp_proxies, "BUTTON", "Proxy Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+        metrics.margin, top, metrics.column_width, manage_height, nullptr);
+
+    RECT proxy_group_rc{ metrics.margin, top, metrics.margin + metrics.column_width, top + manage_height };
+    ProxyLayout proxy_layout = compute_proxy_layout(proxy_group_rc, metrics);
+
+    place(g_lbl_proxy_header, "STATIC", "Available Proxies:", WS_CHILD | WS_VISIBLE,
+        proxy_layout.left, proxy_layout.list_label_top, proxy_layout.inner_width, metrics.line_height, nullptr);
+    place(g_lst_proxy, "LISTBOX", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
+        proxy_layout.left, proxy_layout.list_top, proxy_layout.inner_width, proxy_layout.list_height, (HMENU)20);
+
+    place(g_lbl_proxy_range, "STATIC", "Random Range:", WS_CHILD | WS_VISIBLE,
+        proxy_layout.left, proxy_layout.range_row_top, proxy_layout.range_label_width, metrics.line_height, nullptr);
+    place(g_edt_proxy_range, "EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+        proxy_layout.range_input_left, proxy_layout.range_row_top - 2, proxy_layout.range_input_width, metrics.ctrl_height, nullptr);
+    place(g_btn_proxy_find, "BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        proxy_layout.find_left, proxy_layout.range_row_top - 2, proxy_layout.find_width, proxy_layout.button_height, (HMENU)29);
+
+    place(g_lbl_proxy_input, "STATIC", "Proxy:", WS_CHILD | WS_VISIBLE,
+        proxy_layout.left, proxy_layout.proxy_row_top, proxy_layout.proxy_label_width, metrics.line_height, nullptr);
+    place(g_edt_proxy_test, "EDIT", "192.168.0.1:8080", WS_CHILD | WS_VISIBLE | WS_BORDER,
+        proxy_layout.proxy_input_left, proxy_layout.proxy_row_top - 2, proxy_layout.proxy_input_width, metrics.ctrl_height, nullptr);
+    place(g_btn_proxy_add, "BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        proxy_layout.add_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, (HMENU)21);
+    place(g_btn_proxy_remove, "BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        proxy_layout.remove_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, (HMENU)22);
+
+    place(g_lbl_proxy_scan, "STATIC", "Scan Selected Proxy:", WS_CHILD | WS_VISIBLE,
+        proxy_layout.left, proxy_layout.actions_top, proxy_layout.scan_label_width, metrics.line_height, nullptr);
+    place(g_btn_proxy_scan, "BUTTON", "Test Latency", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        proxy_layout.scan_left, proxy_layout.actions_top - 2, proxy_layout.button_width, proxy_layout.button_height, (HMENU)23);
+    place(g_btn_proxy_save, "BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        proxy_layout.save_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, (HMENU)27);
+    place(g_btn_proxy_load, "BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        proxy_layout.load_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, (HMENU)28);
+
+    place(g_grp_ports, "BUTTON", "Port Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+        metrics.margin + metrics.column_width + metrics.col_gap, top, metrics.column_width, manage_height, nullptr);
+
+    RECT ports_group_rc{ metrics.margin + metrics.column_width + metrics.col_gap, top,
+        metrics.margin + metrics.column_width + metrics.col_gap + metrics.column_width, top + manage_height };
+    PortLayout ports_layout = compute_port_layout(ports_group_rc, metrics);
+
+    place(g_lbl_ports_header, "STATIC", "Ports to Scan:", WS_CHILD | WS_VISIBLE,
+        ports_layout.left, ports_layout.list_label_top, ports_layout.inner_width, metrics.line_height, nullptr);
+    place(g_lst_ports, "LISTBOX", std::string(ports::COMMON_PORTS).c_str(),
+        WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
+        ports_layout.left, ports_layout.list_top, ports_layout.inner_width, ports_layout.list_height, (HMENU)24);
+    place(g_btn_common_ports, "BUTTON", "Load Common Ports", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        ports_layout.left, ports_layout.load_top - 2, ports_layout.load_width, ports_layout.button_height, (HMENU)12);
+    place(g_lbl_port_label, "STATIC", "Port:", WS_CHILD | WS_VISIBLE,
+        ports_layout.left, ports_layout.port_row_top, ports_layout.label_width, metrics.line_height, nullptr);
+    place(g_edt_ports, "EDIT", "", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+        ports_layout.left + ports_layout.label_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.input_width, metrics.ctrl_height, nullptr);
+
+    int ports_add_left = ports_layout.left + ports_layout.label_width + ports_layout.hgap + ports_layout.input_width + ports_layout.hgap;
+    place(g_btn_ports_add, "BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        ports_add_left, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, (HMENU)25);
+    place(g_btn_ports_remove, "BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        ports_add_left + ports_layout.button_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, (HMENU)26);
+
+    top += manage_height + metrics.section_spacing;
+
+    g_output_top = top;
+    g_output_group_height = metrics.client_height - g_output_top - metrics.margin;
+    int min_output_height = compute_min_output_height(metrics);
+    if (g_output_group_height < min_output_height) g_output_group_height = min_output_height;
+
+    place(g_grp_output, "BUTTON", "Output", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+        metrics.margin, g_output_top, metrics.content_width, g_output_group_height, nullptr);
+
+    int output_left = metrics.margin + GROUP_PADDING;
+    int progress_height = metrics.ctrl_height;
+    g_prog_y = g_output_top + GROUP_PADDING;
+    g_status_y = g_prog_y + metrics.line_height + (metrics.row_spacing / 2);
+    g_log_y = g_status_y + metrics.line_height + (metrics.row_spacing / 2);
+
+    place(g_prog, PROGRESS_CLASS, "", WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+        output_left, g_prog_y, metrics.content_width - (GROUP_PADDING * 2), progress_height, nullptr);
+    std::string status_text = "Ready - Version " + app_version::version() + " | Configure targets, proxies, and ports";
+    place(g_lbl_status, "STATIC", status_text.c_str(), WS_CHILD | WS_VISIBLE,
+        output_left, g_status_y, metrics.content_width - (GROUP_PADDING * 2), metrics.line_height, nullptr);
+
+    int log_height = g_output_group_height - (g_log_y - g_output_top) - GROUP_PADDING;
+    if (log_height < metrics.line_height * 5) log_height = metrics.line_height * 5;
+    if (creating && !g_log) {
+        g_log = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT",
+            "PROXIES: Add/Remove/Scan/Save/Load listbox\r\n"
+            "PORTS: Add/Remove from listbox (+/- buttons)\r\n"
+            "TARGETS: Configure counts, delays, and files above\r\n",
+            WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL,
+            output_left, g_log_y, metrics.content_width - (GROUP_PADDING * 2), log_height, hwnd, NULL, hinst, NULL);
+    }
+    else if (g_log) {
+        MoveWindow(g_log, output_left, g_log_y, metrics.content_width - (GROUP_PADDING * 2), log_height, TRUE);
+    }
+}
+
+bool gui::handle_command(int id) {
+    char buf[256];
+
+    if (id == 1) {  // STOP
+        g_running.store(false);
+        gui::log_line("Scan STOPPED by user");
+        gui::enable_controls();
+        return true;
+    }
+
+    if (id == 5 && !g_running.load()) {  // START SCAN
+        g_running.store(true);
+        gui::disable_controls();
+        std::thread(gui::start_scan).detach();
+        return true;
+    }
+
+    if (id == 6) {  // CLEAR
+        clear_log();
+        return true;
+    }
+
+    if (id == 12) {  // COMMON PORTS
+        if (!g_lst_ports) {
+            log_line("ERROR: Ports listbox not ready");
+            return true;
+        }
+        SendMessageA(g_lst_ports, LB_RESETCONTENT, 0, 0);
+        std::vector<std::string> common_ports = {
+            "21","22","23","25","53","80","110","135","139",
+            "443","993","995","3389","8080"
+        };
+        for (const auto& port : common_ports) {
+            SendMessageA(g_lst_ports, LB_ADDSTRING, 0, (LPARAM)port.c_str());
+        }
+        log_line("Loaded 14 common ports to listbox");
+        return true;
+    }
+
+    if (id == 21) {  // ADD PROXY
+        if (!g_lst_proxy || !g_edt_proxy_test) return true;
+        GetWindowTextA(g_edt_proxy_test, buf, sizeof(buf));
+        if (buf[0]) {
+            int idx = (int)SendMessageA(g_lst_proxy, LB_ADDSTRING, 0, (LPARAM)buf);
+            SendMessageA(g_lst_proxy, LB_SETCURSEL, idx, 0);
+            SetWindowTextA(g_edt_proxy_test, "");
+            log_line(std::string("Added proxy: ") + buf);
+        }
+        return true;
+    }
+
+    if (id == 22) {  // REMOVE PROXY
+        if (!g_lst_proxy) return true;
+        int sel = (int)SendMessageA(g_lst_proxy, LB_GETCURSEL, 0, 0);
+        if (sel == LB_ERR || sel < 0) return true;
+        char proxy[256] = { 0 };
+        SendMessageA(g_lst_proxy, LB_GETTEXT, sel, (LPARAM)proxy);
+        SendMessageA(g_lst_proxy, LB_DELETESTRING, sel, 0);
+        log_line(std::string("Removed proxy: ") + proxy);
+        return true;
+    }
+
+    if (id == 23) {  // SCAN PROXIES
+        if (g_lst_proxy)
+            scanner::test_proxies(g_lst_proxy,
+                [](const std::string& line) { gui::log_line(line); });
+        return true;
+    }
+
+    if (id == 25) {  // ADD PORT
+        if (!g_lst_ports || !g_edt_ports) return true;
+        GetWindowTextA(g_edt_ports, buf, sizeof(buf));
+        if (buf[0] && atoi(buf)) {
+            int idx = (int)SendMessageA(g_lst_ports, LB_ADDSTRING, 0, (LPARAM)buf);
+            SendMessageA(g_lst_ports, LB_SETCURSEL, idx, 0);
+            SetWindowTextA(g_edt_ports, "");
+            log_line(std::string("Added port: ") + buf);
+        }
+        return true;
+    }
+
+    if (id == 26) {  // REMOVE PORT
+        if (!g_lst_ports) {
+            log_line("ERROR: Ports listbox not initialized");
+            return true;
+        }
+        int sel = (int)SendMessageA(g_lst_ports, LB_GETCURSEL, 0, 0);
+        if (sel == LB_ERR || sel < 0) {
+            log_line("No port selected");
+            return true;
+        }
+        char port[32] = { 0 };
+        int len = (int)SendMessageA(g_lst_ports, LB_GETTEXTLEN, sel, 0);
+        if (len < 0 || len >= (int)sizeof(port)) {
+            log_line("Invalid port text length");
+            return true;
+        }
+        SendMessageA(g_lst_ports, LB_GETTEXT, sel, (LPARAM)port);
+        SendMessageA(g_lst_ports, LB_DELETESTRING, sel, 0);
+        log_line(std::string("Removed port: ") + port);
+        return true;
+    }
+
+    if (id == 27) {  // SAVE PROXIES
+        if (g_lst_proxy)
+            scanner::save_proxies(g_lst_proxy, exe_dir() + "\\proxies.txt",
+                [](const std::string& line) { gui::log_line(line); });
+        return true;
+    }
+
+    if (id == 28) {  // LOAD PROXIES
+        if (g_lst_proxy)
+            scanner::load_proxies(g_lst_proxy, exe_dir() + "\\proxies.txt",
+                [](const std::string& line) { gui::log_line(line); });
+        return true;
+    }
+
+    if (id == 29) {  // FIND PROXIES
+        gui::find_proxies();
+        return true;
+    }
+
+    return false;
 }
 
 void gui::find_proxies() {
@@ -372,533 +869,33 @@ void gui::start_scan() {
 LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     HINSTANCE hinst = (HINSTANCE)GetWindowLongPtrA(h, GWLP_HINSTANCE);
 
-    struct RowLayout {
-        int y;
-        int spacing;
-        int take(int height) {
-            int current = y;
-            y += height + spacing;
-            return current;
-        }
-    };
-
-    struct PortLayout {
-        int left{};
-        int inner_width{};
-        int list_label_top{};
-        int list_top{};
-        int list_height{};
-        int load_top{};
-        int load_width{};
-        int port_row_top{};
-        int label_width{};
-        int button_width{};
-        int button_height{};
-        int input_width{};
-        int entry_height{};
-        int hgap{};
-    };
-
-    struct ProxyLayout {
-        int left{};
-        int top{};
-        int inner_width{};
-        int list_label_top{};
-        int list_top{};
-        int list_height{};
-        int range_row_top{};
-        int proxy_row_top{};
-        int actions_top{};
-        int hgap{};
-        int button_width{};
-        int button_height{};
-        int small_button_width{};
-        int range_label_width{};
-        int range_input_left{};
-        int range_input_width{};
-        int find_left{};
-        int find_width{};
-        int proxy_label_width{};
-        int proxy_input_left{};
-        int proxy_input_width{};
-        int add_left{};
-        int remove_left{};
-        int scan_label_width{};
-        int scan_left{};
-        int save_left{};
-        int load_left{};
-    };
-
-    auto compute_port_layout = [&](const RECT& group_rc, int line_height, int ctrl_height) {
-        PortLayout layout{};
-        layout.left = group_rc.left + GROUP_PADDING;
-        int right = group_rc.right - GROUP_PADDING;
-        int inner_top = group_rc.top + GROUP_PADDING + 2;
-        int inner_bottom = group_rc.bottom - GROUP_PADDING;
-        layout.inner_width = right - layout.left;
-
-        layout.hgap = 8;
-        int row_spacing = 10;
-        layout.label_width = 50;
-        layout.button_width = 60;
-        layout.button_height = ctrl_height + 2;
-        layout.entry_height = ctrl_height;
-
-        layout.input_width = layout.inner_width - layout.label_width - (layout.button_width * 2) - (layout.hgap * 2);
-        if (layout.input_width < 60) layout.input_width = 60;
-
-        int inner_height = inner_bottom - inner_top;
-        int list_height = inner_height - layout.button_height - layout.entry_height - (row_spacing * 2) - line_height;
-        if (list_height < 80) list_height = 80;
-
-        layout.load_width = layout.inner_width / 3;
-        if (layout.load_width < 110) layout.load_width = 110;
-        if (layout.load_width > layout.inner_width) layout.load_width = layout.inner_width;
-
-        RowLayout rows{ inner_top, row_spacing };
-        layout.list_label_top = rows.take(line_height + list_height);
-        layout.list_top = layout.list_label_top + line_height;
-        layout.list_height = list_height;
-        layout.load_top = rows.take(layout.button_height);
-        layout.port_row_top = rows.take(layout.entry_height);
-        return layout;
-    };
-
-    auto compute_proxy_layout = [&](const RECT& group_rc, int line_height, int ctrl_height) {
-        ProxyLayout layout{};
-        layout.left = group_rc.left + GROUP_PADDING;
-        layout.top = group_rc.top + GROUP_PADDING + 2;
-        int right = group_rc.right - GROUP_PADDING;
-        int inner_bottom = group_rc.bottom - GROUP_PADDING;
-        layout.inner_width = right - layout.left;
-
-        layout.hgap = 8;
-        layout.button_width = 90;
-        layout.button_height = ctrl_height + 2;
-        layout.small_button_width = 50;
-        layout.range_label_width = 115;
-        layout.range_input_width = 60;
-        layout.proxy_label_width = 50;
-
-        int row_spacing = 10;
-        int inner_height = inner_bottom - layout.top;
-        int list_height = inner_height - (layout.button_height * 3) - (row_spacing * 3) - line_height;
-        if (list_height < 100) list_height = 100;
-
-        RowLayout rows{ layout.top, row_spacing };
-        layout.list_label_top = rows.take(line_height + list_height);
-        layout.list_top = layout.list_label_top + line_height;
-        layout.list_height = list_height;
-        layout.range_row_top = rows.take(layout.button_height);
-        layout.proxy_row_top = rows.take(layout.button_height);
-        layout.actions_top = rows.take(layout.button_height);
-
-        layout.range_input_left = layout.left + layout.range_label_width + layout.hgap;
-        layout.find_left = layout.range_input_left + layout.range_input_width + layout.hgap;
-        layout.find_width = layout.inner_width - (layout.range_label_width + layout.hgap + layout.range_input_width + layout.hgap);
-        if (layout.find_width < 120) layout.find_width = 120;
-
-        layout.proxy_input_left = layout.left + layout.proxy_label_width + layout.hgap;
-        layout.proxy_input_width = layout.inner_width - layout.proxy_label_width - layout.hgap - (layout.button_width * 2) - (layout.hgap * 2);
-        if (layout.proxy_input_width < 140) layout.proxy_input_width = 140;
-        layout.add_left = layout.proxy_input_left + layout.proxy_input_width + layout.hgap;
-        layout.remove_left = layout.add_left + layout.button_width + layout.hgap;
-
-        layout.scan_label_width = layout.inner_width - (layout.button_width + layout.hgap + layout.small_button_width + layout.hgap + layout.small_button_width);
-        if (layout.scan_label_width < 140) layout.scan_label_width = 140;
-        layout.scan_left = layout.left + layout.scan_label_width + layout.hgap;
-        layout.save_left = layout.scan_left + layout.button_width + layout.hgap;
-        layout.load_left = layout.save_left + layout.small_button_width + layout.hgap;
-        return layout;
-    };
-
     switch (m) {
-    case WM_CREATE: {
-        RECT rc{}; GetClientRect(h, &rc);
-        const int margin = 12;
-        const int section_spacing = 14;
-        const int line_height = 22;
-        const int ctrl_height = 24;
-        const int content_width = rc.right - rc.left - (margin * 2);
-        const int col_gap = 12;
-        const int column_width = (content_width - col_gap) / 2;
-        const int manage_height = 270;
-        const int target_height = 150;
-
-        int top = margin;
-
-        std::string section_header = app_version::title() + "  \r\n  Targets • Proxies • Ports • Output";
-
-        int info_left = margin + GROUP_PADDING;
-        int info_top = top;
-        CreateWindowA("STATIC", section_header.c_str(), WS_CHILD | WS_VISIBLE | SS_CENTER,
-            info_left, info_top, content_width - (GROUP_PADDING * 2), line_height + 24, h, NULL, hinst, NULL);
-
-
-        int header_height = (line_height * 2) + (GROUP_PADDING * 2);
-        top += header_height + section_spacing;
-
-        g_grp_targets = CreateWindowA("BUTTON", "Target Setup", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin, top, content_width, target_height, h, NULL, hinst, NULL);
-        int inner_left = margin + GROUP_PADDING;
-        int inner_top = top + GROUP_PADDING + 2;
-
-        CreateWindowA("STATIC", "Target Count:", WS_CHILD | WS_VISIBLE, inner_left, inner_top, 95, line_height, h, NULL, hinst, NULL);
-        g_edt_ips = CreateWindowA("EDIT", "10", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            inner_left + 98, inner_top - 2, 80, ctrl_height, h, NULL, hinst, NULL);
-
-        int x = inner_left + 200;
-        CreateWindowA("STATIC", "Threads:", WS_CHILD | WS_VISIBLE, x, inner_top, 75, line_height, h, NULL, hinst, NULL);
-        g_edt_threads = CreateWindowA("EDIT", "2", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            x + 78, inner_top - 2, 60, ctrl_height, h, NULL, hinst, NULL);
-
-        x += 170;
-        CreateWindowA("STATIC", "Delay (ms):", WS_CHILD | WS_VISIBLE, x, inner_top, 80, line_height, h, NULL, hinst, NULL);
-        g_edt_delay = CreateWindowA("EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            x + 83, inner_top - 2, 70, ctrl_height, h, NULL, hinst, NULL);
-
-        inner_top += line_height + 10;
-        g_chk_random = CreateWindowA("BUTTON", "Random IPs", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-            inner_left, inner_top - 2, 110, ctrl_height, h, (HMENU)10, hinst, NULL);
-        SendMessageA(g_chk_random, BM_SETCHECK, BST_CHECKED, 0);
-
-        CreateWindowA("STATIC", "Target File:", WS_CHILD | WS_VISIBLE, inner_left + 130, inner_top, 80, line_height, h, NULL, hinst, NULL);
-        g_edt_path = CreateWindowA("EDIT", "targets.txt", WS_CHILD | WS_VISIBLE | WS_BORDER,
-            inner_left + 215, inner_top - 2, 180, ctrl_height, h, NULL, hinst, NULL);
-        g_btn_gen = CreateWindowA("BUTTON", "Generate", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            inner_left + 400, inner_top - 2, 90, ctrl_height + 2, h, (HMENU)2, hinst, NULL);
-        g_btn_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            inner_left + 495, inner_top - 2, 80, ctrl_height + 2, h, (HMENU)3, hinst, NULL);
-        g_btn_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            inner_left + 580, inner_top - 2, 80, ctrl_height + 2, h, (HMENU)4, hinst, NULL);
-
-        inner_top += line_height + 12;
-        g_btn_scan = CreateWindowA("BUTTON", "START SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
-            inner_left, inner_top - 2, 120, ctrl_height + 2, h, (HMENU)5, hinst, NULL);
-        g_btn_stop = CreateWindowA("BUTTON", "STOP SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            inner_left + 130, inner_top - 2, 120, ctrl_height + 2, h, (HMENU)1, hinst, NULL);
-        g_btn_clear = CreateWindowA("BUTTON", "Clear Log", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            inner_left + 260, inner_top - 2, 120, ctrl_height + 2, h, (HMENU)6, hinst, NULL);
-        EnableWindow(g_btn_stop, FALSE);
-
-        top += target_height + section_spacing;
-
-        g_grp_proxies = CreateWindowA("BUTTON", "Proxy Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin, top, column_width, manage_height, h, NULL, hinst, NULL);
-
-        RECT proxy_group_rc{ margin, top, margin + column_width, top + manage_height };
-        ProxyLayout proxy_layout = compute_proxy_layout(proxy_group_rc, line_height, ctrl_height);
-
-        g_lbl_proxy_header = CreateWindowA("STATIC", "Available Proxies:", WS_CHILD | WS_VISIBLE,
-            proxy_layout.left, proxy_layout.list_label_top, proxy_layout.inner_width, line_height, h, NULL, hinst, NULL);
-        g_lst_proxy = CreateWindowA("LISTBOX", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
-            proxy_layout.left, proxy_layout.list_top, proxy_layout.inner_width, proxy_layout.list_height, h, (HMENU)20, hinst, NULL);
-
-        g_lbl_proxy_range = CreateWindowA("STATIC", "Random Range:", WS_CHILD | WS_VISIBLE,
-            proxy_layout.left, proxy_layout.range_row_top, proxy_layout.range_label_width, line_height, h, NULL, hinst, NULL);
-        g_edt_proxy_range = CreateWindowA("EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            proxy_layout.range_input_left, proxy_layout.range_row_top - 2, proxy_layout.range_input_width, ctrl_height, h, NULL, hinst, NULL);
-        g_btn_proxy_find = CreateWindowA("BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_layout.find_left, proxy_layout.range_row_top - 2, proxy_layout.find_width, proxy_layout.button_height, h, (HMENU)29, hinst, NULL);
-
-        g_lbl_proxy_input = CreateWindowA("STATIC", "Proxy:", WS_CHILD | WS_VISIBLE,
-            proxy_layout.left, proxy_layout.proxy_row_top, proxy_layout.proxy_label_width, line_height, h, NULL, hinst, NULL);
-        g_edt_proxy_test = CreateWindowA("EDIT", "192.168.0.1:8080", WS_CHILD | WS_VISIBLE | WS_BORDER,
-            proxy_layout.proxy_input_left, proxy_layout.proxy_row_top - 2, proxy_layout.proxy_input_width, ctrl_height, h, NULL, hinst, NULL);
-        g_btn_proxy_add = CreateWindowA("BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_layout.add_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, h, (HMENU)21, hinst, NULL);
-        g_btn_proxy_remove = CreateWindowA("BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_layout.remove_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, h, (HMENU)22, hinst, NULL);
-
-        g_lbl_proxy_scan = CreateWindowA("STATIC", "Scan Selected Proxy:", WS_CHILD | WS_VISIBLE,
-            proxy_layout.left, proxy_layout.actions_top, proxy_layout.scan_label_width, line_height, h, NULL, hinst, NULL);
-        g_btn_proxy_scan = CreateWindowA("BUTTON", "Test Latency", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_layout.scan_left, proxy_layout.actions_top - 2, proxy_layout.button_width, proxy_layout.button_height, h, (HMENU)23, hinst, NULL);
-        g_btn_proxy_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_layout.save_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, h, (HMENU)27, hinst, NULL);
-        g_btn_proxy_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_layout.load_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, h, (HMENU)28, hinst, NULL);
-
-        g_grp_ports = CreateWindowA("BUTTON", "Port Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin + column_width + col_gap, top, column_width, manage_height, h, NULL, hinst, NULL);
-
-        RECT ports_group_rc{ margin + column_width + col_gap, top, margin + column_width + col_gap + column_width, top + manage_height };
-        PortLayout ports_layout = compute_port_layout(ports_group_rc, line_height, ctrl_height);
-
-        g_lbl_ports_header = CreateWindowA("STATIC", "Ports to Scan:", WS_CHILD | WS_VISIBLE, ports_layout.left, ports_layout.list_label_top, ports_layout.inner_width, line_height, h, NULL, hinst, NULL);
-        g_lst_ports = CreateWindowA("LISTBOX", std::string(ports::COMMON_PORTS).c_str(),
-            WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
-            ports_layout.left, ports_layout.list_top, ports_layout.inner_width, ports_layout.list_height, h, (HMENU)24, hinst, NULL);
-
-        g_btn_common_ports = CreateWindowA("BUTTON", "Load Common", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            ports_layout.left, ports_layout.load_top - 2, ports_layout.load_width, ports_layout.button_height, h, (HMENU)12, hinst, NULL);
-
-        g_lbl_port_label = CreateWindowA("STATIC", "Port:", WS_CHILD | WS_VISIBLE, ports_layout.left, ports_layout.port_row_top, ports_layout.label_width, line_height, h, NULL, hinst, NULL);
-        g_edt_ports = CreateWindowA("EDIT", "8080", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            ports_layout.left + ports_layout.label_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.input_width, ctrl_height, h, NULL, hinst, NULL);
-        int ports_add_left = ports_layout.left + ports_layout.label_width + ports_layout.hgap + ports_layout.input_width + ports_layout.hgap;
-        g_btn_ports_add = CreateWindowA("BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            ports_add_left, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, h, (HMENU)25, hinst, NULL);
-        g_btn_ports_remove = CreateWindowA("BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            ports_add_left + ports_layout.button_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, h, (HMENU)26, hinst, NULL);
-
-        top += manage_height + section_spacing;
-
-        g_output_top = top;
-        g_output_group_height = rc.bottom - g_output_top - margin;
-        if (g_output_group_height < 150) g_output_group_height = 150;
-
-        g_grp_output = CreateWindowA("BUTTON", "Output & Status", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin, g_output_top, content_width, g_output_group_height, h, NULL, hinst, NULL);
-
-        int output_left = margin + GROUP_PADDING;
-        int output_top = g_output_top + GROUP_PADDING + 2;
-
-        g_prog_y = output_top;
-        g_status_y = g_prog_y + line_height + 6;
-        g_log_y = g_status_y + line_height + 6;
-
-        g_prog = CreateWindowA(PROGRESS_CLASS, "", WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
-            output_left, g_prog_y, content_width - (GROUP_PADDING * 2), 22, h, NULL, hinst, NULL);
-        std::string status_text = "Ready - Version " + app_version::version() + " | Configure targets, proxies, and ports";
-        g_lbl_status = CreateWindowA("STATIC", status_text.c_str(), WS_CHILD | WS_VISIBLE,
-            output_left, g_status_y, content_width - (GROUP_PADDING * 2), line_height, h, NULL, hinst, NULL);
-
-        int log_height = g_output_group_height - (g_log_y - g_output_top) - GROUP_PADDING;
-        if (log_height < 120) log_height = 120;
-        g_log = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT",
-            "PROXIES: Add/Remove/Scan/Save/Load listbox\r\n"
-            "PORTS: Add/Remove from listbox (+/- buttons)\r\n"
-            "TARGETS: Configure counts, delays, and files above\r\n",
-            WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL,
-            output_left, g_log_y, content_width - (GROUP_PADDING * 2), log_height, h, NULL, hinst, NULL);
-
+    case WM_CREATE:
+        layout_controls(h, hinst, true);
         break;
-    }
 
     case WM_COMMAND: {
         int id = LOWORD(w);
-        char buf[256];
-
-        // MAIN CONTROLS
-        if (id == 1) {  // STOP
-            g_running.store(false);
-            gui::log_line("Scan STOPPED by user");
-            gui::enable_controls();
-            return 0;
-        }
-
-        if (id == 5 && !g_running.load()) {  // START SCAN
-            g_running.store(true);
-            gui::disable_controls();
-            std::thread(gui::start_scan).detach();
-            return 0;
-        }
-
-
-        if (id == 6) {  // CLEAR
-            clear_log();
-            return 0;
-        }
-
-        if (id == 12) {  // COMMON PORTS
-            if (!g_lst_ports) {
-                log_line("ERROR: Ports listbox not ready");
-                return 0;
-            }
-            SendMessageA(g_lst_ports, LB_RESETCONTENT, 0, 0);
-            std::vector<std::string> common_ports = {
-                "21","22","23","25","53","80","110","135","139",
-                "443","993","995","3389","8080"
-            };
-            for (const auto& port : common_ports) {
-                SendMessageA(g_lst_ports, LB_ADDSTRING, 0, (LPARAM)port.c_str());
-            }
-            log_line("Loaded 14 common ports to listbox");
-            return 0;
-        }
-
-        // PROXY CONTROLS
-        if (id == 21) {  // ADD PROXY
-            if (!g_lst_proxy || !g_edt_proxy_test) return 0;
-            GetWindowTextA(g_edt_proxy_test, buf, sizeof(buf));
-            if (buf[0]) {
-                int idx = (int)SendMessageA(g_lst_proxy, LB_ADDSTRING, 0, (LPARAM)buf);
-                SendMessageA(g_lst_proxy, LB_SETCURSEL, idx, 0);
-                SetWindowTextA(g_edt_proxy_test, "");
-                log_line(std::string("Added proxy: ") + buf);
-            }
-            return 0;
-        }
-
-        if (id == 22) {  // REMOVE PROXY
-            if (!g_lst_proxy) return 0;
-            int sel = (int)SendMessageA(g_lst_proxy, LB_GETCURSEL, 0, 0);
-            if (sel == LB_ERR || sel < 0) return 0;
-            char proxy[256] = { 0 };
-            SendMessageA(g_lst_proxy, LB_GETTEXT, sel, (LPARAM)proxy);
-            SendMessageA(g_lst_proxy, LB_DELETESTRING, sel, 0);
-            log_line(std::string("Removed proxy: ") + proxy);
-            return 0;
-        }
-
-        if (id == 23) {  // SCAN PROXIES
-            if (g_lst_proxy)
-                scanner::test_proxies(g_lst_proxy,
-                    [](const std::string& line) { gui::log_line(line); });
-            return 0;
-        }
-
-        // PORTS CONTROLS
-        if (id == 25) {  // ADD PORT
-            if (!g_lst_ports || !g_edt_ports) return 0;
-            GetWindowTextA(g_edt_ports, buf, sizeof(buf));
-            if (buf[0] && atoi(buf)) {
-                int idx = (int)SendMessageA(g_lst_ports, LB_ADDSTRING, 0, (LPARAM)buf);
-                SendMessageA(g_lst_ports, LB_SETCURSEL, idx, 0);
-                SetWindowTextA(g_edt_ports, "");
-                log_line(std::string("Added port: ") + buf);
-            }
-            return 0;
-        }
-
-        if (id == 26) {  // REMOVE PORT
-            if (!g_lst_ports) {
-                log_line("ERROR: Ports listbox not initialized");
-                return 0;
-            }
-            int sel = (int)SendMessageA(g_lst_ports, LB_GETCURSEL, 0, 0);
-            if (sel == LB_ERR || sel < 0) {
-                log_line("No port selected");
-                return 0;
-            }
-            char port[32] = { 0 };
-            int len = (int)SendMessageA(g_lst_ports, LB_GETTEXTLEN, sel, 0);
-            if (len < 0 || len >= (int)sizeof(port)) {
-                log_line("Invalid port text length");
-                return 0;
-            }
-            SendMessageA(g_lst_ports, LB_GETTEXT, sel, (LPARAM)port);
-            SendMessageA(g_lst_ports, LB_DELETESTRING, sel, 0);
-            log_line(std::string("Removed port: ") + port);
-            return 0;
-        }
-
-        if (id == 27) {  // SAVE PROXIES
-            if (g_lst_proxy)
-                scanner::save_proxies(g_lst_proxy, exe_dir() + "\\proxies.txt",
-                    [](const std::string& line) { gui::log_line(line); });
-            return 0;
-        }
-
-        if (id == 28) {  // LOAD PROXIES
-            if (g_lst_proxy)
-                scanner::load_proxies(g_lst_proxy, exe_dir() + "\\proxies.txt",
-                    [](const std::string& line) { gui::log_line(line); });
-            return 0;
-        }
-
-        if (id == 29) {  // FIND PROXIES
-            gui::find_proxies();
-            return 0;
-        }
-
+        if (handle_command(id)) return 0;
         break;
     }
 
     case WM_GETMINMAXINFO: {
         MINMAXINFO* mmi = reinterpret_cast<MINMAXINFO*>(l);
         if (mmi) {
-            mmi->ptMinTrackSize.x = 880;
-            mmi->ptMinTrackSize.y = 760;
+            UiMetrics metrics = calculate_metrics(h);
+            int min_width = metrics.margin * 2 + (metrics.line_height * 30) + metrics.col_gap;
+            int min_height = metrics.margin * 2 + compute_header_height(metrics) + compute_target_height(metrics)
+                + compute_manage_height(metrics) + compute_min_output_height(metrics) + (metrics.section_spacing * 3);
+            mmi->ptMinTrackSize.x = min_width;
+            mmi->ptMinTrackSize.y = min_height;
         }
         break;
     }
 
-    case WM_SIZE: {
-        RECT rc; GetClientRect(h, &rc);
-        const int margin = 12;
-        const int section_spacing = 14;
-        const int line_height = 22;
-        const int ctrl_height = 24;
-        const int content_width = rc.right - rc.left - (margin * 2);
-        const int col_gap = 12;
-        const int column_width = (content_width - col_gap) / 2;
-
-        int top = margin;
-        int header_height = (line_height * 2) + (GROUP_PADDING * 2);
-
-        if (g_grp_info) MoveWindow(g_grp_info, margin, top, content_width, header_height, TRUE);
-        top += header_height + section_spacing;
-
-        int target_height = 150;
-        if (g_grp_targets) MoveWindow(g_grp_targets, margin, top, content_width, target_height, TRUE);
-        top += target_height + section_spacing;
-
-        int manage_height = 270;
-        if (g_grp_proxies) MoveWindow(g_grp_proxies, margin, top, column_width, manage_height, TRUE);
-        if (g_grp_ports) MoveWindow(g_grp_ports, margin + column_width + col_gap, top, column_width, manage_height, TRUE);
-        top += manage_height + section_spacing;
-
-        // Proxy management children
-        RECT proxy_group_rc{};
-        if (g_grp_proxies) {
-            GetClientRect(g_grp_proxies, &proxy_group_rc);
-            MapWindowPoints(g_grp_proxies, h, reinterpret_cast<POINT*>(&proxy_group_rc), 2);
-        }
-        ProxyLayout proxy_layout = compute_proxy_layout(proxy_group_rc, line_height, ctrl_height);
-
-        if (g_lbl_proxy_header) MoveWindow(g_lbl_proxy_header, proxy_layout.left, proxy_layout.list_label_top, proxy_layout.inner_width, line_height, TRUE);
-        if (g_lst_proxy) MoveWindow(g_lst_proxy, proxy_layout.left, proxy_layout.list_top, proxy_layout.inner_width, proxy_layout.list_height, TRUE);
-
-        if (g_lbl_proxy_range) MoveWindow(g_lbl_proxy_range, proxy_layout.left, proxy_layout.range_row_top, proxy_layout.range_label_width, line_height, TRUE);
-        if (g_edt_proxy_range) MoveWindow(g_edt_proxy_range, proxy_layout.range_input_left, proxy_layout.range_row_top - 2, proxy_layout.range_input_width, ctrl_height, TRUE);
-        if (g_btn_proxy_find) MoveWindow(g_btn_proxy_find, proxy_layout.find_left, proxy_layout.range_row_top - 2, proxy_layout.find_width, proxy_layout.button_height, TRUE);
-
-        if (g_lbl_proxy_input) MoveWindow(g_lbl_proxy_input, proxy_layout.left, proxy_layout.proxy_row_top, proxy_layout.proxy_label_width, line_height, TRUE);
-        if (g_edt_proxy_test) MoveWindow(g_edt_proxy_test, proxy_layout.proxy_input_left, proxy_layout.proxy_row_top - 2, proxy_layout.proxy_input_width, ctrl_height, TRUE);
-        if (g_btn_proxy_add) MoveWindow(g_btn_proxy_add, proxy_layout.add_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, TRUE);
-        if (g_btn_proxy_remove) MoveWindow(g_btn_proxy_remove, proxy_layout.remove_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, TRUE);
-
-        if (g_lbl_proxy_scan) MoveWindow(g_lbl_proxy_scan, proxy_layout.left, proxy_layout.actions_top, proxy_layout.scan_label_width, line_height, TRUE);
-        if (g_btn_proxy_scan) MoveWindow(g_btn_proxy_scan, proxy_layout.scan_left, proxy_layout.actions_top - 2, proxy_layout.button_width, proxy_layout.button_height, TRUE);
-        if (g_btn_proxy_save) MoveWindow(g_btn_proxy_save, proxy_layout.save_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, TRUE);
-        if (g_btn_proxy_load) MoveWindow(g_btn_proxy_load, proxy_layout.load_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, TRUE);
-
-        // Port management children
-        RECT ports_group_rc{};
-        if (g_grp_ports) {
-            GetClientRect(g_grp_ports, &ports_group_rc);
-            MapWindowPoints(g_grp_ports, h, reinterpret_cast<POINT*>(&ports_group_rc), 2);
-        }
-
-        PortLayout ports_layout = compute_port_layout(ports_group_rc, line_height, ctrl_height);
-
-        if (g_lbl_ports_header) MoveWindow(g_lbl_ports_header, ports_layout.left, ports_layout.list_label_top, ports_layout.inner_width, line_height, TRUE);
-        if (g_lst_ports) MoveWindow(g_lst_ports, ports_layout.left, ports_layout.list_top, ports_layout.inner_width, ports_layout.list_height, TRUE);
-        if (g_btn_common_ports) MoveWindow(g_btn_common_ports, ports_layout.left, ports_layout.load_top - 2, ports_layout.load_width, ports_layout.button_height, TRUE);
-        if (g_lbl_port_label) MoveWindow(g_lbl_port_label, ports_layout.left, ports_layout.port_row_top, ports_layout.label_width, line_height, TRUE);
-        if (g_edt_ports) MoveWindow(g_edt_ports, ports_layout.left + ports_layout.label_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.input_width, ctrl_height, TRUE);
-        int ports_add_left = ports_layout.left + ports_layout.label_width + ports_layout.hgap + ports_layout.input_width + ports_layout.hgap;
-        if (g_btn_ports_add) MoveWindow(g_btn_ports_add, ports_add_left, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, TRUE);
-        if (g_btn_ports_remove) MoveWindow(g_btn_ports_remove, ports_add_left + ports_layout.button_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, TRUE);
-
-        g_output_top = top;
-        g_output_group_height = rc.bottom - g_output_top - margin;
-        if (g_output_group_height < 150) g_output_group_height = 150;
-
-        if (g_grp_output) MoveWindow(g_grp_output, margin, g_output_top, content_width, g_output_group_height, TRUE);
-
-        int output_left = margin + GROUP_PADDING;
-        if (g_prog) MoveWindow(g_prog, output_left, g_prog_y, content_width - (GROUP_PADDING * 2), 22, TRUE);
-        if (g_lbl_status) MoveWindow(g_lbl_status, output_left, g_status_y, content_width - (GROUP_PADDING * 2), 22, TRUE);
-        if (g_log) {
-            int log_height = g_output_group_height - (g_log_y - g_output_top) - GROUP_PADDING;
-            if (log_height < 120) log_height = 120;
-            MoveWindow(g_log, output_left, g_log_y, content_width - (GROUP_PADDING * 2), log_height, TRUE);
-        }
+    case WM_SIZE:
+        layout_controls(h, hinst, false);
         break;
-    }
 
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -909,3 +906,4 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     }
     return 0;
 }
+

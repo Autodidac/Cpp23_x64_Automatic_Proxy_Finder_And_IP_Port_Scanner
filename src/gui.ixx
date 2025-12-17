@@ -51,6 +51,7 @@ export namespace gui
     inline constexpr int GROUP_PADDING = 12;
 
     inline std::atomic<bool> g_running{ false };
+    inline std::atomic<bool> g_proxy_searching{ false };
     inline std::mt19937 g_rng(std::random_device{}());
 
     std::string exe_dir();
@@ -149,73 +150,90 @@ void gui::preview_random_targets(int count, const std::vector<uint16_t>& ports) 
 }
 
 void gui::find_proxies() {
+    if (g_proxy_searching.exchange(true)) {
+        log_line("[PROXY FIND] Discovery already running");
+        return;
+    }
+
     if (!g_lst_proxy || !g_edt_proxy_range) {
         log_line("[PROXY FIND] Controls not ready");
+        g_proxy_searching.store(false);
         return;
     }
 
-    char buf[32];
-    GetWindowTextA(g_edt_proxy_range, buf, sizeof(buf));
-    int scan_count = std::max(1, std::min(5000, atoi(buf[0] ? buf : "100")));
+    if (g_btn_proxy_find) EnableWindow(g_btn_proxy_find, FALSE);
 
-    log_line("--- PROXY DISCOVERY STARTED ---");
-    log_line(std::string("Scanning ") + std::to_string(scan_count) + " random IPs on common proxy ports...");
+    std::thread([] {
+        struct ProxyCleanup {
+            ~ProxyCleanup() {
+                g_proxy_searching.store(false);
+                if (g_btn_proxy_find) EnableWindow(g_btn_proxy_find, TRUE);
+            }
+        } cleanup;
 
-    std::vector<uint16_t> proxy_ports = { 8080, 3128, 1080, 4145, 8000, 8118 };
+        char buf[32]{};
+        GetWindowTextA(g_edt_proxy_range, buf, sizeof(buf));
+        int scan_count = std::max(1, std::min(5000, atoi(buf[0] ? buf : "100")));
 
-    std::atomic<int> live_proxies{ 0 };
-    std::mutex proxy_mutex;
+        log_line("--- PROXY DISCOVERY STARTED ---");
+        log_line(std::string("Scanning ") + std::to_string(scan_count) + " random IPs on common proxy ports...");
 
-    WSADATA wsa{};
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
-        log_line("[PROXY FIND] WSAStartup failed");
-        return;
-    }
+        std::vector<uint16_t> proxy_ports = { 8080, 3128, 1080, 4145, 8000, 8118 };
 
-    auto worker = [&](int start, int end) {
-        thread_local std::mt19937 rng_local{ std::random_device{}() };
-        std::uniform_int_distribution<int> dist(1, 254);
-        for (int i = start; i < end; ++i) {
-            char ip[16];
-            wsprintfA(ip, "%d.%d.%d.%d", dist(rng_local), dist(rng_local), dist(rng_local), dist(rng_local));
+        std::atomic<int> live_proxies{ 0 };
+        std::mutex proxy_mutex;
 
-            for (uint16_t port : proxy_ports) {
-                SOCKET s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-                if (s != INVALID_SOCKET) {
-                    sockaddr_in addr{};
-                    addr.sin_family = AF_INET;
-                    addr.sin_port = htons(port);
-                    inet_pton(AF_INET, ip, &addr.sin_addr);
+        WSADATA wsa{};
+        if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+            log_line("[PROXY FIND] WSAStartup failed");
+            return;
+        }
 
-                    if (::connect(s, (sockaddr*)&addr, sizeof(addr)) == 0) {
-                        std::lock_guard<std::mutex> lock(proxy_mutex);
-                        char proxy[64];
-                        wsprintfA(proxy, "%s:%u", ip, port);
-                        SendMessageA(g_lst_proxy, LB_ADDSTRING, 0, (LPARAM)proxy);
-                        live_proxies.fetch_add(1);
-                        log_line(std::string("LIVE PROXY: ") + proxy);
+        auto worker = [&](int start, int end) {
+            thread_local std::mt19937 rng_local{ std::random_device{}() };
+            std::uniform_int_distribution<int> dist(1, 254);
+            for (int i = start; i < end; ++i) {
+                char ip[16];
+                wsprintfA(ip, "%d.%d.%d.%d", dist(rng_local), dist(rng_local), dist(rng_local), dist(rng_local));
+
+                for (uint16_t port : proxy_ports) {
+                    SOCKET s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                    if (s != INVALID_SOCKET) {
+                        sockaddr_in addr{};
+                        addr.sin_family = AF_INET;
+                        addr.sin_port = htons(port);
+                        inet_pton(AF_INET, ip, &addr.sin_addr);
+
+                        if (::connect(s, (sockaddr*)&addr, sizeof(addr)) == 0) {
+                            std::lock_guard<std::mutex> lock(proxy_mutex);
+                            char proxy[64];
+                            wsprintfA(proxy, "%s:%u", ip, port);
+                            SendMessageA(g_lst_proxy, LB_ADDSTRING, 0, (LPARAM)proxy);
+                            live_proxies.fetch_add(1);
+                            log_line(std::string("LIVE PROXY: ") + proxy);
+                        }
+                        ::closesocket(s);
                     }
-                    ::closesocket(s);
                 }
             }
+        };
+
+        std::vector<std::thread> hunters;
+        int chunk = scan_count / 8;
+        for (int i = 0; i < 8; ++i) {
+            int end = (i == 7) ? scan_count : (i + 1) * chunk;
+            hunters.emplace_back(worker, i * chunk, end);
         }
-    };
 
-    std::vector<std::thread> hunters;
-    int chunk = scan_count / 8;
-    for (int i = 0; i < 8; ++i) {
-        int end = (i == 7) ? scan_count : (i + 1) * chunk;
-        hunters.emplace_back(worker, i * chunk, end);
-    }
+        for (auto& t : hunters) t.join();
 
-    for (auto& t : hunters) t.join();
+        WSACleanup();
 
-    WSACleanup();
-
-    char summary[128];
-    wsprintfA(summary, "Found %d live proxies!", live_proxies.load());
-    log_line(summary);
-    log_line("--- PROXY DISCOVERY COMPLETE ---");
+        char summary[128];
+        wsprintfA(summary, "Found %d live proxies!", live_proxies.load());
+        log_line(summary);
+        log_line("--- PROXY DISCOVERY COMPLETE ---");
+    }).detach();
 }
 
 void gui::start_scan() {
@@ -615,6 +633,7 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         const int margin = 12;
         const int section_spacing = 14;
         const int line_height = 22;
+        const int ctrl_height = 24;
         const int content_width = rc.right - rc.left - (margin * 2);
         const int col_gap = 12;
         const int column_width = (content_width - col_gap) / 2;
@@ -629,10 +648,48 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (g_grp_targets) MoveWindow(g_grp_targets, margin, top, content_width, target_height, TRUE);
         top += target_height + section_spacing;
 
+        int manage_top = top;
         int manage_height = 270;
         if (g_grp_proxies) MoveWindow(g_grp_proxies, margin, top, column_width, manage_height, TRUE);
         if (g_grp_ports) MoveWindow(g_grp_ports, margin + column_width + col_gap, top, column_width, manage_height, TRUE);
         top += manage_height + section_spacing;
+
+        // Proxy management children
+        int proxy_left = margin + GROUP_PADDING;
+        int proxy_top = manage_top + GROUP_PADDING + 2;
+        int proxy_inner_width = column_width - (GROUP_PADDING * 2);
+        int proxy_btn_height = ctrl_height + 2;
+        int proxy_find_width = proxy_inner_width - 95 - 8 - 80 - 8;
+        int proxy_input_width = proxy_inner_width - 50 - (90 * 2) - (8 * 2);
+
+        if (g_lst_proxy) MoveWindow(g_lst_proxy, proxy_left, proxy_top + line_height, proxy_inner_width, 120, TRUE);
+        if (g_edt_proxy_range) MoveWindow(g_edt_proxy_range, proxy_left + 160, proxy_top + line_height + 128 - 2, 50, ctrl_height, TRUE);
+        if (g_btn_proxy_find) MoveWindow(g_btn_proxy_find, proxy_left + 240, proxy_top + line_height + 128 - 2, proxy_find_width - 70, proxy_btn_height, TRUE);
+
+        int proxy_controls_top = proxy_top + (line_height * 2) + 126;
+        if (g_edt_proxy_test) MoveWindow(g_edt_proxy_test, proxy_left + 55, proxy_controls_top - 2, proxy_input_width, ctrl_height, TRUE);
+        if (g_btn_proxy_add) MoveWindow(g_btn_proxy_add, proxy_left + 55 + proxy_input_width + 8, proxy_controls_top - 2, 90, proxy_btn_height, TRUE);
+        if (g_btn_proxy_remove) MoveWindow(g_btn_proxy_remove, proxy_left + 55 + proxy_input_width + 8 + 90 + 8, proxy_controls_top - 2, 90, proxy_btn_height, TRUE);
+
+        int proxy_actions_top = proxy_controls_top + line_height - 20;
+        if (g_btn_proxy_scan) MoveWindow(g_btn_proxy_scan, proxy_left + 160, proxy_actions_top - 2, 90, proxy_btn_height, TRUE);
+        if (g_btn_proxy_save) MoveWindow(g_btn_proxy_save, proxy_left + 160 + 90 + 8, proxy_actions_top - 2, 50, proxy_btn_height, TRUE);
+        if (g_btn_proxy_load) MoveWindow(g_btn_proxy_load, proxy_left + 160 + 90 + 8 + 55, proxy_actions_top - 2, 50, proxy_btn_height, TRUE);
+
+        // Port management children
+        int port_left = margin + column_width + col_gap + GROUP_PADDING;
+        int port_top = manage_top + GROUP_PADDING + 2;
+        int port_inner_width = column_width - (GROUP_PADDING * 2);
+        int ports_list_top = port_top + line_height;
+        int ports_list_height = 120;
+        int ports_button_top = ports_list_top + ports_list_height + 4;
+        int port_entry_top = ports_list_top + ports_list_height + 6 + line_height + 10;
+
+        if (g_lst_ports) MoveWindow(g_lst_ports, port_left, ports_list_top, port_inner_width, ports_list_height, TRUE);
+        if (g_btn_common_ports) MoveWindow(g_btn_common_ports, port_left, ports_button_top, 110, ctrl_height + 2, TRUE);
+        if (g_edt_ports) MoveWindow(g_edt_ports, port_left + 50, port_entry_top - 2, 80, ctrl_height, TRUE);
+        if (g_btn_ports_add) MoveWindow(g_btn_ports_add, port_left + 135, port_entry_top - 2, 45, ctrl_height + 2, TRUE);
+        if (g_btn_ports_remove) MoveWindow(g_btn_ports_remove, port_left + 185, port_entry_top - 2, 45, ctrl_height + 2, TRUE);
 
         int scan_height = 74;
         if (g_grp_scan) MoveWindow(g_grp_scan, margin, top, content_width, scan_height, TRUE);

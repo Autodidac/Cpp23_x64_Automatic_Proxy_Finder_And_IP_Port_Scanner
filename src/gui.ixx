@@ -39,6 +39,8 @@ export namespace gui
     inline HWND g_btn_ports_add = nullptr, g_btn_ports_remove = nullptr, g_btn_proxy_save = nullptr, g_btn_proxy_load = nullptr;
     inline HWND g_btn_proxy_find = nullptr;
     inline HWND g_edt_proxy_range = nullptr;
+    inline HWND g_lbl_proxy_header = nullptr, g_lbl_proxy_range = nullptr;
+    inline HWND g_lbl_proxy_input = nullptr, g_lbl_proxy_scan = nullptr;
     inline HWND g_lbl_ports_header = nullptr, g_lbl_port_label = nullptr;
 
     inline HWND g_grp_info = nullptr, g_grp_targets = nullptr, g_grp_proxies = nullptr, g_grp_ports = nullptr;
@@ -397,6 +399,36 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         int hgap{};
     };
 
+    struct ProxyLayout {
+        int left{};
+        int top{};
+        int inner_width{};
+        int list_label_top{};
+        int list_top{};
+        int list_height{};
+        int range_row_top{};
+        int proxy_row_top{};
+        int actions_top{};
+        int hgap{};
+        int button_width{};
+        int button_height{};
+        int small_button_width{};
+        int range_label_width{};
+        int range_input_left{};
+        int range_input_width{};
+        int find_left{};
+        int find_width{};
+        int proxy_label_width{};
+        int proxy_input_left{};
+        int proxy_input_width{};
+        int add_left{};
+        int remove_left{};
+        int scan_label_width{};
+        int scan_left{};
+        int save_left{};
+        int load_left{};
+    };
+
     auto compute_port_layout = [&](const RECT& group_rc, int line_height, int ctrl_height) {
         PortLayout layout{};
         layout.left = group_rc.left + GROUP_PADDING;
@@ -429,6 +461,54 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         layout.list_height = list_height;
         layout.load_top = rows.take(layout.button_height);
         layout.port_row_top = rows.take(layout.entry_height);
+        return layout;
+    };
+
+    auto compute_proxy_layout = [&](const RECT& group_rc, int line_height, int ctrl_height) {
+        ProxyLayout layout{};
+        layout.left = group_rc.left + GROUP_PADDING;
+        layout.top = group_rc.top + GROUP_PADDING + 2;
+        int right = group_rc.right - GROUP_PADDING;
+        int inner_bottom = group_rc.bottom - GROUP_PADDING;
+        layout.inner_width = right - layout.left;
+
+        layout.hgap = 8;
+        layout.button_width = 90;
+        layout.button_height = ctrl_height + 2;
+        layout.small_button_width = 50;
+        layout.range_label_width = 115;
+        layout.range_input_width = 60;
+        layout.proxy_label_width = 50;
+
+        int row_spacing = 10;
+        int inner_height = inner_bottom - layout.top;
+        int list_height = inner_height - (layout.button_height * 3) - (row_spacing * 3) - line_height;
+        if (list_height < 100) list_height = 100;
+
+        RowLayout rows{ layout.top, row_spacing };
+        layout.list_label_top = rows.take(line_height + list_height);
+        layout.list_top = layout.list_label_top + line_height;
+        layout.list_height = list_height;
+        layout.range_row_top = rows.take(layout.button_height);
+        layout.proxy_row_top = rows.take(layout.button_height);
+        layout.actions_top = rows.take(layout.button_height);
+
+        layout.range_input_left = layout.left + layout.range_label_width + layout.hgap;
+        layout.find_left = layout.range_input_left + layout.range_input_width + layout.hgap;
+        layout.find_width = layout.inner_width - (layout.range_label_width + layout.hgap + layout.range_input_width + layout.hgap);
+        if (layout.find_width < 120) layout.find_width = 120;
+
+        layout.proxy_input_left = layout.left + layout.proxy_label_width + layout.hgap;
+        layout.proxy_input_width = layout.inner_width - layout.proxy_label_width - layout.hgap - (layout.button_width * 2) - (layout.hgap * 2);
+        if (layout.proxy_input_width < 140) layout.proxy_input_width = 140;
+        layout.add_left = layout.proxy_input_left + layout.proxy_input_width + layout.hgap;
+        layout.remove_left = layout.add_left + layout.button_width + layout.hgap;
+
+        layout.scan_label_width = layout.inner_width - (layout.button_width + layout.hgap + layout.small_button_width + layout.hgap + layout.small_button_width);
+        if (layout.scan_label_width < 140) layout.scan_label_width = 140;
+        layout.scan_left = layout.left + layout.scan_label_width + layout.hgap;
+        layout.save_left = layout.scan_left + layout.button_width + layout.hgap;
+        layout.load_left = layout.save_left + layout.small_button_width + layout.hgap;
         return layout;
     };
 
@@ -493,48 +573,41 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
         top += 112 + section_spacing;
 
-        const int proxy_hgap = 8;
-        const int proxy_btn_width = 90;
-
         g_grp_proxies = CreateWindowA("BUTTON", "Proxy Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin, top, column_width, manage_height, h, NULL, hinst, NULL);
-        const int proxy_left = margin + GROUP_PADDING;
-        const int proxy_inner_width = column_width - (GROUP_PADDING * 2);
-        const int proxy_btn_height = ctrl_height + 2;
-        const int proxy_find_width = proxy_inner_width - 95 - proxy_hgap - 80 - proxy_hgap;
-        const int proxy_input_width = proxy_inner_width - 50 - (proxy_btn_width * 2) - (proxy_hgap * 2);
 
-        RowLayout proxy_rows{ top + GROUP_PADDING + 2, 10 };
+        RECT proxy_group_rc{ margin, top, margin + column_width, top + manage_height };
+        ProxyLayout proxy_layout = compute_proxy_layout(proxy_group_rc, line_height, ctrl_height);
 
-        int available_row = proxy_rows.take(line_height + 120);
-        CreateWindowA("STATIC", "Available Proxies:", WS_CHILD | WS_VISIBLE, proxy_left, available_row, proxy_inner_width, line_height, h, NULL, hinst, NULL);
+        g_lbl_proxy_header = CreateWindowA("STATIC", "Available Proxies:", WS_CHILD | WS_VISIBLE,
+            proxy_layout.left, proxy_layout.list_label_top, proxy_layout.inner_width, line_height, h, NULL, hinst, NULL);
         g_lst_proxy = CreateWindowA("LISTBOX", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
-            proxy_left, available_row + line_height, proxy_inner_width, 120, h, (HMENU)20, hinst, NULL);
+            proxy_layout.left, proxy_layout.list_top, proxy_layout.inner_width, proxy_layout.list_height, h, (HMENU)20, hinst, NULL);
 
-        int range_row = proxy_rows.take(proxy_btn_height);
-        CreateWindowA("STATIC", "Random Range:", WS_CHILD | WS_VISIBLE, proxy_left, range_row, 115, line_height, h, NULL, hinst, NULL);
+        g_lbl_proxy_range = CreateWindowA("STATIC", "Random Range:", WS_CHILD | WS_VISIBLE,
+            proxy_layout.left, proxy_layout.range_row_top, proxy_layout.range_label_width, line_height, h, NULL, hinst, NULL);
         g_edt_proxy_range = CreateWindowA("EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            proxy_left + 160, range_row - 2, 50, ctrl_height, h, NULL, hinst, NULL);
+            proxy_layout.range_input_left, proxy_layout.range_row_top - 2, proxy_layout.range_input_width, ctrl_height, h, NULL, hinst, NULL);
         g_btn_proxy_find = CreateWindowA("BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 240, range_row - 2, proxy_find_width - 70, proxy_btn_height, h, (HMENU)29, hinst, NULL);
+            proxy_layout.find_left, proxy_layout.range_row_top - 2, proxy_layout.find_width, proxy_layout.button_height, h, (HMENU)29, hinst, NULL);
 
-        int proxy_row = proxy_rows.take(proxy_btn_height);
-        CreateWindowA("STATIC", "Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_row, 50, line_height, h, NULL, hinst, NULL);
+        g_lbl_proxy_input = CreateWindowA("STATIC", "Proxy:", WS_CHILD | WS_VISIBLE,
+            proxy_layout.left, proxy_layout.proxy_row_top, proxy_layout.proxy_label_width, line_height, h, NULL, hinst, NULL);
         g_edt_proxy_test = CreateWindowA("EDIT", "192.168.0.1:8080", WS_CHILD | WS_VISIBLE | WS_BORDER,
-            proxy_left + 55, proxy_row - 2, proxy_input_width, ctrl_height, h, NULL, hinst, NULL);
+            proxy_layout.proxy_input_left, proxy_layout.proxy_row_top - 2, proxy_layout.proxy_input_width, ctrl_height, h, NULL, hinst, NULL);
         g_btn_proxy_add = CreateWindowA("BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 55 + proxy_input_width + proxy_hgap, proxy_row - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)21, hinst, NULL);
+            proxy_layout.add_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, h, (HMENU)21, hinst, NULL);
         g_btn_proxy_remove = CreateWindowA("BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 55 + proxy_input_width + proxy_hgap + proxy_btn_width + proxy_hgap, proxy_row - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)22, hinst, NULL);
+            proxy_layout.remove_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, h, (HMENU)22, hinst, NULL);
 
-        int scan_row = proxy_rows.take(proxy_btn_height);
-        CreateWindowA("STATIC", "Scan Selected Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, scan_row, proxy_inner_width - 250, line_height, h, NULL, hinst, NULL);
+        g_lbl_proxy_scan = CreateWindowA("STATIC", "Scan Selected Proxy:", WS_CHILD | WS_VISIBLE,
+            proxy_layout.left, proxy_layout.actions_top, proxy_layout.scan_label_width, line_height, h, NULL, hinst, NULL);
         g_btn_proxy_scan = CreateWindowA("BUTTON", "Test Latency", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 160, scan_row - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)23, hinst, NULL);
+            proxy_layout.scan_left, proxy_layout.actions_top - 2, proxy_layout.button_width, proxy_layout.button_height, h, (HMENU)23, hinst, NULL);
         g_btn_proxy_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 160 + proxy_btn_width + proxy_hgap, scan_row - 2, proxy_btn_width - 40, proxy_btn_height, h, (HMENU)27, hinst, NULL);
+            proxy_layout.save_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, h, (HMENU)27, hinst, NULL);
         g_btn_proxy_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 160 + proxy_btn_width + proxy_hgap + 55, scan_row - 2, proxy_btn_width - 40, proxy_btn_height, h, (HMENU)28, hinst, NULL);
+            proxy_layout.load_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, h, (HMENU)28, hinst, NULL);
 
         g_grp_ports = CreateWindowA("BUTTON", "Port Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin + column_width + col_gap, top, column_width, manage_height, h, NULL, hinst, NULL);
@@ -738,6 +811,15 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         break;
     }
 
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO* mmi = reinterpret_cast<MINMAXINFO*>(l);
+        if (mmi) {
+            mmi->ptMinTrackSize.x = 880;
+            mmi->ptMinTrackSize.y = 760;
+        }
+        break;
+    }
+
     case WM_SIZE: {
         RECT rc; GetClientRect(h, &rc);
         const int margin = 12;
@@ -758,33 +840,35 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (g_grp_targets) MoveWindow(g_grp_targets, margin, top, content_width, target_height, TRUE);
         top += target_height + section_spacing;
 
-        int manage_top = top;
         int manage_height = 270;
         if (g_grp_proxies) MoveWindow(g_grp_proxies, margin, top, column_width, manage_height, TRUE);
         if (g_grp_ports) MoveWindow(g_grp_ports, margin + column_width + col_gap, top, column_width, manage_height, TRUE);
         top += manage_height + section_spacing;
 
         // Proxy management children
-        int proxy_left = margin + GROUP_PADDING;
-        int proxy_top = manage_top + GROUP_PADDING + 2;
-        int proxy_inner_width = column_width - (GROUP_PADDING * 2);
-        int proxy_btn_height = ctrl_height + 2;
-        int proxy_find_width = proxy_inner_width - 95 - 8 - 80 - 8;
-        int proxy_input_width = proxy_inner_width - 50 - (90 * 2) - (8 * 2);
+        RECT proxy_group_rc{};
+        if (g_grp_proxies) {
+            GetClientRect(g_grp_proxies, &proxy_group_rc);
+            MapWindowPoints(g_grp_proxies, h, reinterpret_cast<POINT*>(&proxy_group_rc), 2);
+        }
+        ProxyLayout proxy_layout = compute_proxy_layout(proxy_group_rc, line_height, ctrl_height);
 
-        if (g_lst_proxy) MoveWindow(g_lst_proxy, proxy_left, proxy_top + line_height, proxy_inner_width, 120, TRUE);
-        if (g_edt_proxy_range) MoveWindow(g_edt_proxy_range, proxy_left + 160, proxy_top + line_height + 128 - 2, 50, ctrl_height, TRUE);
-        if (g_btn_proxy_find) MoveWindow(g_btn_proxy_find, proxy_left + 240, proxy_top + line_height + 128 - 2, proxy_find_width - 70, proxy_btn_height, TRUE);
+        if (g_lbl_proxy_header) MoveWindow(g_lbl_proxy_header, proxy_layout.left, proxy_layout.list_label_top, proxy_layout.inner_width, line_height, TRUE);
+        if (g_lst_proxy) MoveWindow(g_lst_proxy, proxy_layout.left, proxy_layout.list_top, proxy_layout.inner_width, proxy_layout.list_height, TRUE);
 
-        int proxy_controls_top = proxy_top + (line_height * 2) + 126;
-        if (g_edt_proxy_test) MoveWindow(g_edt_proxy_test, proxy_left + 55, proxy_controls_top - 2, proxy_input_width, ctrl_height, TRUE);
-        if (g_btn_proxy_add) MoveWindow(g_btn_proxy_add, proxy_left + 55 + proxy_input_width + 8, proxy_controls_top - 2, 90, proxy_btn_height, TRUE);
-        if (g_btn_proxy_remove) MoveWindow(g_btn_proxy_remove, proxy_left + 55 + proxy_input_width + 8 + 90 + 8, proxy_controls_top - 2, 90, proxy_btn_height, TRUE);
+        if (g_lbl_proxy_range) MoveWindow(g_lbl_proxy_range, proxy_layout.left, proxy_layout.range_row_top, proxy_layout.range_label_width, line_height, TRUE);
+        if (g_edt_proxy_range) MoveWindow(g_edt_proxy_range, proxy_layout.range_input_left, proxy_layout.range_row_top - 2, proxy_layout.range_input_width, ctrl_height, TRUE);
+        if (g_btn_proxy_find) MoveWindow(g_btn_proxy_find, proxy_layout.find_left, proxy_layout.range_row_top - 2, proxy_layout.find_width, proxy_layout.button_height, TRUE);
 
-        int proxy_actions_top = proxy_controls_top + line_height - 20;
-        if (g_btn_proxy_scan) MoveWindow(g_btn_proxy_scan, proxy_left + 160, proxy_actions_top - 2, 90, proxy_btn_height, TRUE);
-        if (g_btn_proxy_save) MoveWindow(g_btn_proxy_save, proxy_left + 160 + 90 + 8, proxy_actions_top - 2, 50, proxy_btn_height, TRUE);
-        if (g_btn_proxy_load) MoveWindow(g_btn_proxy_load, proxy_left + 160 + 90 + 8 + 55, proxy_actions_top - 2, 50, proxy_btn_height, TRUE);
+        if (g_lbl_proxy_input) MoveWindow(g_lbl_proxy_input, proxy_layout.left, proxy_layout.proxy_row_top, proxy_layout.proxy_label_width, line_height, TRUE);
+        if (g_edt_proxy_test) MoveWindow(g_edt_proxy_test, proxy_layout.proxy_input_left, proxy_layout.proxy_row_top - 2, proxy_layout.proxy_input_width, ctrl_height, TRUE);
+        if (g_btn_proxy_add) MoveWindow(g_btn_proxy_add, proxy_layout.add_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, TRUE);
+        if (g_btn_proxy_remove) MoveWindow(g_btn_proxy_remove, proxy_layout.remove_left, proxy_layout.proxy_row_top - 2, proxy_layout.button_width, proxy_layout.button_height, TRUE);
+
+        if (g_lbl_proxy_scan) MoveWindow(g_lbl_proxy_scan, proxy_layout.left, proxy_layout.actions_top, proxy_layout.scan_label_width, line_height, TRUE);
+        if (g_btn_proxy_scan) MoveWindow(g_btn_proxy_scan, proxy_layout.scan_left, proxy_layout.actions_top - 2, proxy_layout.button_width, proxy_layout.button_height, TRUE);
+        if (g_btn_proxy_save) MoveWindow(g_btn_proxy_save, proxy_layout.save_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, TRUE);
+        if (g_btn_proxy_load) MoveWindow(g_btn_proxy_load, proxy_layout.load_left, proxy_layout.actions_top - 2, proxy_layout.small_button_width, proxy_layout.button_height, TRUE);
 
         // Port management children
         RECT ports_group_rc{};

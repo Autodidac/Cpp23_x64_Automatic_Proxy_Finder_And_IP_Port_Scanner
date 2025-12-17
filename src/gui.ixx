@@ -433,46 +433,55 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         const int proxy_hgap = 8;
         const int proxy_btn_width = 90;
 
+        struct RowLayout {
+            int y;
+            int spacing;
+            int take(int height) {
+                int current = y;
+                y += height + spacing;
+                return current;
+            }
+        };
+
         g_grp_proxies = CreateWindowA("BUTTON", "Proxy Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin, top, column_width, manage_height, h, NULL, hinst, NULL);
-        int proxy_left = margin + GROUP_PADDING;
-        int proxy_top = top + GROUP_PADDING + 2;
-        int proxy_inner_width = column_width - (GROUP_PADDING * 2);
-        int proxy_btn_height = ctrl_height + 2;
-        int proxy_find_width = proxy_inner_width - 95 - proxy_hgap - 80 - proxy_hgap;
-        int proxy_input_width = proxy_inner_width - 50 - (proxy_btn_width * 2) - (proxy_hgap * 2);
+        const int proxy_left = margin + GROUP_PADDING;
+        const int proxy_inner_width = column_width - (GROUP_PADDING * 2);
+        const int proxy_btn_height = ctrl_height + 2;
+        const int proxy_find_width = proxy_inner_width - 95 - proxy_hgap - 80 - proxy_hgap;
+        const int proxy_input_width = proxy_inner_width - 50 - (proxy_btn_width * 2) - (proxy_hgap * 2);
 
-        CreateWindowA("STATIC", "Available Proxies:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, proxy_inner_width, line_height, h, NULL, hinst, NULL);
-        proxy_top += line_height;
+        RowLayout proxy_rows{ top + GROUP_PADDING + 2, 10 };
+
+        int available_row = proxy_rows.take(line_height + 120);
+        CreateWindowA("STATIC", "Available Proxies:", WS_CHILD | WS_VISIBLE, proxy_left, available_row, proxy_inner_width, line_height, h, NULL, hinst, NULL);
         g_lst_proxy = CreateWindowA("LISTBOX", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
-            proxy_left, proxy_top, proxy_inner_width, 120, h, (HMENU)20, hinst, NULL);
-        proxy_top += 120 + 8;
+            proxy_left, available_row + line_height, proxy_inner_width, 120, h, (HMENU)20, hinst, NULL);
 
-        CreateWindowA("STATIC", "Random Range:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, 115, line_height, h, NULL, hinst, NULL);
+        int range_row = proxy_rows.take(proxy_btn_height);
+        CreateWindowA("STATIC", "Random Range:", WS_CHILD | WS_VISIBLE, proxy_left, range_row, 115, line_height, h, NULL, hinst, NULL);
         g_edt_proxy_range = CreateWindowA("EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            proxy_left + 160, proxy_top - 2, 50, ctrl_height, h, NULL, hinst, NULL);
+            proxy_left + 160, range_row - 2, 50, ctrl_height, h, NULL, hinst, NULL);
         g_btn_proxy_find = CreateWindowA("BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 240, proxy_top - 2, proxy_find_width - 70, proxy_btn_height, h, (HMENU)29, hinst, NULL);
-        proxy_top += line_height + 6;
+            proxy_left + 240, range_row - 2, proxy_find_width - 70, proxy_btn_height, h, (HMENU)29, hinst, NULL);
 
-        CreateWindowA("STATIC", "Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, 50, line_height, h, NULL, hinst, NULL);
+        int proxy_row = proxy_rows.take(proxy_btn_height);
+        CreateWindowA("STATIC", "Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_row, 50, line_height, h, NULL, hinst, NULL);
         g_edt_proxy_test = CreateWindowA("EDIT", "192.168.0.1:8080", WS_CHILD | WS_VISIBLE | WS_BORDER,
-            proxy_left + 55, proxy_top - 2, proxy_input_width, ctrl_height, h, NULL, hinst, NULL);
+            proxy_left + 55, proxy_row - 2, proxy_input_width, ctrl_height, h, NULL, hinst, NULL);
         g_btn_proxy_add = CreateWindowA("BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 55 + proxy_input_width + proxy_hgap, proxy_top - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)21, hinst, NULL);
+            proxy_left + 55 + proxy_input_width + proxy_hgap, proxy_row - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)21, hinst, NULL);
         g_btn_proxy_remove = CreateWindowA("BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 55 + proxy_input_width + proxy_hgap + proxy_btn_width + proxy_hgap, proxy_top - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)22, hinst, NULL);
-        proxy_top += line_height + 10;
+            proxy_left + 55 + proxy_input_width + proxy_hgap + proxy_btn_width + proxy_hgap, proxy_row - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)22, hinst, NULL);
 
-        CreateWindowA("STATIC", "Scan Selected Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, proxy_inner_width - 250, line_height, h, NULL, hinst, NULL);
-        proxy_top += line_height - 20;
-        proxy_left += 160;
+        int scan_row = proxy_rows.take(proxy_btn_height);
+        CreateWindowA("STATIC", "Scan Selected Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, scan_row, proxy_inner_width - 250, line_height, h, NULL, hinst, NULL);
         g_btn_proxy_scan = CreateWindowA("BUTTON", "Test Latency", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left, proxy_top - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)23, hinst, NULL);
+            proxy_left + 160, scan_row - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)23, hinst, NULL);
         g_btn_proxy_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + proxy_btn_width + proxy_hgap, proxy_top - 2, proxy_btn_width - 40, proxy_btn_height, h, (HMENU)27, hinst, NULL);
+            proxy_left + 160 + proxy_btn_width + proxy_hgap, scan_row - 2, proxy_btn_width - 40, proxy_btn_height, h, (HMENU)27, hinst, NULL);
         g_btn_proxy_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + proxy_btn_width + proxy_hgap + 55, proxy_top - 2, proxy_btn_width - 40, proxy_btn_height, h, (HMENU)28, hinst, NULL);
+            proxy_left + 160 + proxy_btn_width + proxy_hgap + 55, scan_row - 2, proxy_btn_width - 40, proxy_btn_height, h, (HMENU)28, hinst, NULL);
 
         g_grp_ports = CreateWindowA("BUTTON", "Port Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin + column_width + col_gap, top, column_width, manage_height, h, NULL, hinst, NULL);

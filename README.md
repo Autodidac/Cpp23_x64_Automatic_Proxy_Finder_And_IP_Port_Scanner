@@ -4,7 +4,16 @@ A small, single-threaded HTTP/1.1 probe (plain TCP, **no TLS**) intended for con
 
 ## Build (Visual Studio)
 
-Open the folder in Visual Studio (File → Open → Folder). Configure x64 Debug/Release and build.
+Option 1: Open the folder in Visual Studio (File → Open → Folder). Configure x64 Debug/Release and build.
+
+Option 2: Generate a Visual Studio solution via CMake and open it:
+
+```powershell
+cmake -S . -B build-msvc -G "Visual Studio 17 2022" -A x64
+cmake --build build-msvc --config Release
+```
+
+Then open `build-msvc/InternetScanner23.sln` in Visual Studio if you prefer the full solution view.
 
 ## Build (CMake CLI)
 

@@ -39,6 +39,7 @@ export namespace gui
     inline HWND g_btn_ports_add = nullptr, g_btn_ports_remove = nullptr, g_btn_proxy_save = nullptr, g_btn_proxy_load = nullptr;
     inline HWND g_btn_proxy_find = nullptr;
     inline HWND g_edt_proxy_range = nullptr;
+    inline HWND g_lbl_ports_header = nullptr, g_lbl_port_label = nullptr;
 
     inline HWND g_grp_info = nullptr, g_grp_targets = nullptr, g_grp_proxies = nullptr, g_grp_ports = nullptr;
     inline HWND g_grp_scan = nullptr, g_grp_output = nullptr;
@@ -369,6 +370,68 @@ void gui::start_scan() {
 LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     HINSTANCE hinst = (HINSTANCE)GetWindowLongPtrA(h, GWLP_HINSTANCE);
 
+    struct RowLayout {
+        int y;
+        int spacing;
+        int take(int height) {
+            int current = y;
+            y += height + spacing;
+            return current;
+        }
+    };
+
+    struct PortLayout {
+        int left{};
+        int inner_width{};
+        int list_label_top{};
+        int list_top{};
+        int list_height{};
+        int load_top{};
+        int load_width{};
+        int port_row_top{};
+        int label_width{};
+        int button_width{};
+        int button_height{};
+        int input_width{};
+        int entry_height{};
+        int hgap{};
+    };
+
+    auto compute_port_layout = [&](const RECT& group_rc, int line_height, int ctrl_height) {
+        PortLayout layout{};
+        layout.left = group_rc.left + GROUP_PADDING;
+        int right = group_rc.right - GROUP_PADDING;
+        int inner_top = group_rc.top + GROUP_PADDING + 2;
+        int inner_bottom = group_rc.bottom - GROUP_PADDING;
+        layout.inner_width = right - layout.left;
+
+        layout.hgap = 8;
+        int row_spacing = 10;
+        layout.label_width = 50;
+        layout.button_width = 60;
+        layout.button_height = ctrl_height + 2;
+        layout.entry_height = ctrl_height;
+
+        layout.input_width = layout.inner_width - layout.label_width - (layout.button_width * 2) - (layout.hgap * 2);
+        if (layout.input_width < 60) layout.input_width = 60;
+
+        int inner_height = inner_bottom - inner_top;
+        int list_height = inner_height - layout.button_height - layout.entry_height - (row_spacing * 2) - line_height;
+        if (list_height < 80) list_height = 80;
+
+        layout.load_width = layout.inner_width / 3;
+        if (layout.load_width < 110) layout.load_width = 110;
+        if (layout.load_width > layout.inner_width) layout.load_width = layout.inner_width;
+
+        RowLayout rows{ inner_top, row_spacing };
+        layout.list_label_top = rows.take(line_height + list_height);
+        layout.list_top = layout.list_label_top + line_height;
+        layout.list_height = list_height;
+        layout.load_top = rows.take(layout.button_height);
+        layout.port_row_top = rows.take(layout.entry_height);
+        return layout;
+    };
+
     switch (m) {
     case WM_CREATE: {
         RECT rc{}; GetClientRect(h, &rc);
@@ -379,6 +442,7 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         const int content_width = rc.right - rc.left - (margin * 2);
         const int col_gap = 12;
         const int column_width = (content_width - col_gap) / 2;
+        const int manage_height = 270;
 
         int top = margin;
 
@@ -429,19 +493,8 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
         top += 112 + section_spacing;
 
-        const int manage_height = 270;
         const int proxy_hgap = 8;
         const int proxy_btn_width = 90;
-
-        struct RowLayout {
-            int y;
-            int spacing;
-            int take(int height) {
-                int current = y;
-                y += height + spacing;
-                return current;
-            }
-        };
 
         g_grp_proxies = CreateWindowA("BUTTON", "Proxy Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin, top, column_width, manage_height, h, NULL, hinst, NULL);
@@ -485,27 +538,26 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
         g_grp_ports = CreateWindowA("BUTTON", "Port Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin + column_width + col_gap, top, column_width, manage_height, h, NULL, hinst, NULL);
-        int port_left = margin + column_width + col_gap + GROUP_PADDING;
-        int port_top = top + GROUP_PADDING + 2;
 
-        CreateWindowA("STATIC", "Ports to Scan:", WS_CHILD | WS_VISIBLE, port_left, port_top, column_width - 30, line_height, h, NULL, hinst, NULL);
-        port_top += line_height;
+        RECT ports_group_rc{ margin + column_width + col_gap, top, margin + column_width + col_gap + column_width, top + manage_height };
+        PortLayout ports_layout = compute_port_layout(ports_group_rc, line_height, ctrl_height);
+
+        g_lbl_ports_header = CreateWindowA("STATIC", "Ports to Scan:", WS_CHILD | WS_VISIBLE, ports_layout.left, ports_layout.list_label_top, ports_layout.inner_width, line_height, h, NULL, hinst, NULL);
         g_lst_ports = CreateWindowA("LISTBOX", std::string(ports::COMMON_PORTS).c_str(),
             WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
-            port_left, port_top, column_width - (GROUP_PADDING * 2), 120, h, (HMENU)24, hinst, NULL);
-        port_top += 126;
+            ports_layout.left, ports_layout.list_top, ports_layout.inner_width, ports_layout.list_height, h, (HMENU)24, hinst, NULL);
 
         g_btn_common_ports = CreateWindowA("BUTTON", "Load Common", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            port_left, port_top - 2, 110, ctrl_height + 2, h, (HMENU)12, hinst, NULL);
-        port_top += line_height + 10;
+            ports_layout.left, ports_layout.load_top - 2, ports_layout.load_width, ports_layout.button_height, h, (HMENU)12, hinst, NULL);
 
-        CreateWindowA("STATIC", "Port:", WS_CHILD | WS_VISIBLE, port_left, port_top, 45, line_height, h, NULL, hinst, NULL);
+        g_lbl_port_label = CreateWindowA("STATIC", "Port:", WS_CHILD | WS_VISIBLE, ports_layout.left, ports_layout.port_row_top, ports_layout.label_width, line_height, h, NULL, hinst, NULL);
         g_edt_ports = CreateWindowA("EDIT", "8080", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            port_left + 50, port_top - 2, 80, ctrl_height, h, NULL, hinst, NULL);
+            ports_layout.left + ports_layout.label_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.input_width, ctrl_height, h, NULL, hinst, NULL);
+        int ports_add_left = ports_layout.left + ports_layout.label_width + ports_layout.hgap + ports_layout.input_width + ports_layout.hgap;
         g_btn_ports_add = CreateWindowA("BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            port_left + 135, port_top - 2, 45, ctrl_height + 2, h, (HMENU)25, hinst, NULL);
+            ports_add_left, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, h, (HMENU)25, hinst, NULL);
         g_btn_ports_remove = CreateWindowA("BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            port_left + 185, port_top - 2, 45, ctrl_height + 2, h, (HMENU)26, hinst, NULL);
+            ports_add_left + ports_layout.button_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, h, (HMENU)26, hinst, NULL);
 
         top += manage_height + section_spacing;
 
@@ -741,43 +793,16 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             MapWindowPoints(g_grp_ports, h, reinterpret_cast<POINT*>(&ports_group_rc), 2);
         }
 
-        int port_left = ports_group_rc.left + GROUP_PADDING;
-        int port_top = ports_group_rc.top + GROUP_PADDING + 2;
-        int port_right = ports_group_rc.right - GROUP_PADDING;
-        int port_bottom = ports_group_rc.bottom - GROUP_PADDING;
-        int port_inner_width = port_right - port_left;
+        PortLayout ports_layout = compute_port_layout(ports_group_rc, line_height, ctrl_height);
 
-        int ports_list_top = port_top + line_height;
-        int vertical_gap = 8;
-        int ports_button_height = ctrl_height + 2;
-        int ports_entry_height = ctrl_height;
-
-        int available_height = port_bottom - ports_list_top;
-        int min_list_height = 60;
-        int ports_list_height = available_height - (ports_button_height + ports_entry_height + (vertical_gap * 2));
-        if (ports_list_height < min_list_height) ports_list_height = min_list_height;
-
-        int ports_button_top = ports_list_top + ports_list_height + vertical_gap;
-        int port_entry_top = ports_button_top + ports_button_height + vertical_gap;
-
-        int max_entry_top = port_bottom - ports_entry_height;
-        if (port_entry_top > max_entry_top) {
-            port_entry_top = max_entry_top;
-            ports_button_top = port_entry_top - vertical_gap - ports_button_height;
-            if (ports_button_top < ports_list_top + vertical_gap) ports_button_top = ports_list_top + vertical_gap;
-            ports_list_height = ports_button_top - vertical_gap - ports_list_top;
-            if (ports_list_height < min_list_height) {
-                ports_list_height = min_list_height;
-                ports_button_top = ports_list_top + ports_list_height + vertical_gap;
-                port_entry_top = ports_button_top + ports_button_height + vertical_gap;
-            }
-        }
-
-        if (g_lst_ports) MoveWindow(g_lst_ports, port_left, ports_list_top, port_inner_width, ports_list_height, TRUE);
-        if (g_btn_common_ports) MoveWindow(g_btn_common_ports, port_left, ports_button_top, 110, ports_button_height, TRUE);
-        if (g_edt_ports) MoveWindow(g_edt_ports, port_left + 50, port_entry_top - 2, 80, ctrl_height, TRUE);
-        if (g_btn_ports_add) MoveWindow(g_btn_ports_add, port_left + 135, port_entry_top - 2, 45, ports_button_height, TRUE);
-        if (g_btn_ports_remove) MoveWindow(g_btn_ports_remove, port_left + 185, port_entry_top - 2, 45, ports_button_height, TRUE);
+        if (g_lbl_ports_header) MoveWindow(g_lbl_ports_header, ports_layout.left, ports_layout.list_label_top, ports_layout.inner_width, line_height, TRUE);
+        if (g_lst_ports) MoveWindow(g_lst_ports, ports_layout.left, ports_layout.list_top, ports_layout.inner_width, ports_layout.list_height, TRUE);
+        if (g_btn_common_ports) MoveWindow(g_btn_common_ports, ports_layout.left, ports_layout.load_top - 2, ports_layout.load_width, ports_layout.button_height, TRUE);
+        if (g_lbl_port_label) MoveWindow(g_lbl_port_label, ports_layout.left, ports_layout.port_row_top, ports_layout.label_width, line_height, TRUE);
+        if (g_edt_ports) MoveWindow(g_edt_ports, ports_layout.left + ports_layout.label_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.input_width, ctrl_height, TRUE);
+        int ports_add_left = ports_layout.left + ports_layout.label_width + ports_layout.hgap + ports_layout.input_width + ports_layout.hgap;
+        if (g_btn_ports_add) MoveWindow(g_btn_ports_add, ports_add_left, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, TRUE);
+        if (g_btn_ports_remove) MoveWindow(g_btn_ports_remove, ports_add_left + ports_layout.button_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, TRUE);
 
         int scan_height = 74;
         if (g_grp_scan) MoveWindow(g_grp_scan, margin, top, content_width, scan_height, TRUE);

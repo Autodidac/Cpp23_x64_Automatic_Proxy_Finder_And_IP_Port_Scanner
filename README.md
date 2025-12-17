@@ -2,6 +2,10 @@
 
 A small, single-threaded HTTP/1.1 probe (plain TCP, **no TLS**) intended for controlled testing on targets you own or have explicit permission to test.
 
+## What's new (v0.0.9)
+- Proxy discovery now runs asynchronously so the UI stays responsive while scanning for live proxies.
+- Port management controls resize with the window, keeping the list and buttons aligned inside the group box.
+
 ## Build (Visual Studio)
 
 Option 1: Open the folder in Visual Studio (File → Open → Folder). Configure x64 Debug/Release and build.

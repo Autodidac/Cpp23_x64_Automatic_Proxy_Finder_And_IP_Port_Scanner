@@ -1,6 +1,7 @@
 ﻿// main.cpp
 #include <windows.h>
 #include <commctrl.h>
+#include <string>
 import gui;
 import version;
 
@@ -19,7 +20,9 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE, LPSTR, int) {
 
     RegisterClassA(&wc);
 
-    HWND h = CreateWindowExA(WS_EX_APPWINDOW, wc.lpszClassName, app_version::TITLE,
+    std::string window_title = app_version::title();
+
+    HWND h = CreateWindowExA(WS_EX_APPWINDOW, wc.lpszClassName, window_title.c_str(),
         WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 900, 700,
         NULL, NULL, hi, NULL);
 

@@ -23,6 +23,7 @@ cmake --build build
 ## Targets file format
 
 One entry per line:
+- `127.0.0.1`
 - `example.com`
 - `example.com:8080`
 - `http://example.com/path?x=y`

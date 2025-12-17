@@ -431,11 +431,13 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             scan_left + 260, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)6, hinst, NULL);
         EnableWindow(g_btn_stop, FALSE);
 
-        top += 74 + section_spacing;
+        top += 74;
 
-        g_prog_y = top;
-        g_status_y = g_prog_y + 28;
-        g_log_y = g_status_y + 26;
+        int row_y = top + section_spacing; // separate scan row from progress/log section
+
+        g_prog_y = row_y;
+        g_status_y = g_prog_y + line_height + 6;
+        g_log_y = g_status_y + line_height + 6;
 
         g_prog = CreateWindowA(PROGRESS_CLASS, "", WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
             margin, g_prog_y, content_width, 22, h, NULL, hinst, NULL);

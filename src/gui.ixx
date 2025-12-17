@@ -1,5 +1,7 @@
 ﻿// gui.ixx - FIXED: Proper braces + ASCII + string_view fix
 module;
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <commctrl.h>
 #include <thread>
@@ -19,6 +21,7 @@ import scanner;
 import ports;
 
 #pragma comment(lib, "Comctl32.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 #undef min
 #undef max
@@ -27,12 +30,14 @@ export namespace gui
 {
     inline HWND g_log = nullptr, g_btn_scan = nullptr, g_btn_stop = nullptr, g_btn_gen = nullptr;
     inline HWND g_btn_save = nullptr, g_btn_load = nullptr, g_btn_clear = nullptr, g_btn_common_ports = nullptr;
-	inline HWND g_cbo_proxy = nullptr;
+        inline HWND g_cbo_proxy = nullptr;
     inline HWND g_lst_proxy = nullptr, g_lst_ports = nullptr, g_edt_ips = nullptr, g_edt_ports = nullptr, g_prog = nullptr;
     inline HWND g_chk_random = nullptr, g_lbl_status = nullptr, g_edt_threads = nullptr;
     inline HWND g_edt_delay = nullptr, g_edt_path = nullptr, g_edt_proxy_test = nullptr;
     inline HWND g_btn_proxy_add = nullptr, g_btn_proxy_remove = nullptr, g_btn_proxy_scan = nullptr;
     inline HWND g_btn_ports_add = nullptr, g_btn_ports_remove = nullptr, g_btn_proxy_save = nullptr, g_btn_proxy_load = nullptr;
+    inline HWND g_btn_proxy_find = nullptr;
+    inline HWND g_edt_proxy_range = nullptr;
 
     inline std::atomic<bool> g_running{ false };
     inline std::mt19937 g_rng(std::random_device{}());
@@ -42,6 +47,7 @@ export namespace gui
     void clear_log();
     void update_progress(int current, int total);
     void preview_random_targets(int count, const std::vector<uint16_t>& ports);
+    void find_proxies();
     void start_scan();
     LRESULT CALLBACK WndProc(HWND h, UINT m, WPARAM w, LPARAM l);
 
@@ -53,6 +59,7 @@ export namespace gui
         EnableWindow(g_btn_proxy_add, FALSE);
         EnableWindow(g_btn_proxy_remove, FALSE);
         EnableWindow(g_btn_proxy_scan, FALSE);
+        EnableWindow(g_btn_proxy_find, FALSE);
         EnableWindow(g_btn_ports_add, FALSE);
         EnableWindow(g_btn_ports_remove, FALSE);
         EnableWindow(g_btn_clear, FALSE);
@@ -71,6 +78,7 @@ export namespace gui
         EnableWindow(g_btn_proxy_add, TRUE);
         EnableWindow(g_btn_proxy_remove, TRUE);
         EnableWindow(g_btn_proxy_scan, TRUE);
+        EnableWindow(g_btn_proxy_find, TRUE);
         EnableWindow(g_btn_ports_add, TRUE);
         EnableWindow(g_btn_ports_remove, TRUE);
         EnableWindow(g_btn_clear, TRUE);
@@ -127,6 +135,76 @@ void gui::preview_random_targets(int count, const std::vector<uint16_t>& ports) 
     }
     if (count > 20) log_line("... and " + std::to_string(count - 20) + " more");
     log_line("---------------------------------------");
+}
+
+void gui::find_proxies() {
+    if (!g_lst_proxy || !g_edt_proxy_range) {
+        log_line("[PROXY FIND] Controls not ready");
+        return;
+    }
+
+    char buf[32];
+    GetWindowTextA(g_edt_proxy_range, buf, sizeof(buf));
+    int scan_count = std::max(100, std::min(5000, atoi(buf[0] ? buf : "1000")));
+
+    log_line("--- PROXY DISCOVERY STARTED ---");
+    log_line(std::string("Scanning ") + std::to_string(scan_count) + " random IPs on common proxy ports...");
+
+    std::vector<uint16_t> proxy_ports = { 8080, 3128, 1080, 4145, 8000, 8118 };
+
+    std::atomic<int> live_proxies{ 0 };
+    std::mutex proxy_mutex;
+
+    WSADATA wsa{};
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        log_line("[PROXY FIND] WSAStartup failed");
+        return;
+    }
+
+    auto worker = [&](int start, int end) {
+        thread_local std::mt19937 rng_local{ std::random_device{}() };
+        std::uniform_int_distribution<int> dist(1, 254);
+        for (int i = start; i < end; ++i) {
+            char ip[16];
+            wsprintfA(ip, "%d.%d.%d.%d", dist(rng_local), dist(rng_local), dist(rng_local), dist(rng_local));
+
+            for (uint16_t port : proxy_ports) {
+                SOCKET s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                if (s != INVALID_SOCKET) {
+                    sockaddr_in addr{};
+                    addr.sin_family = AF_INET;
+                    addr.sin_port = htons(port);
+                    inet_pton(AF_INET, ip, &addr.sin_addr);
+
+                    if (::connect(s, (sockaddr*)&addr, sizeof(addr)) == 0) {
+                        std::lock_guard<std::mutex> lock(proxy_mutex);
+                        char proxy[64];
+                        wsprintfA(proxy, "%s:%u", ip, port);
+                        SendMessageA(g_lst_proxy, LB_ADDSTRING, 0, (LPARAM)proxy);
+                        live_proxies.fetch_add(1);
+                        log_line(std::string("LIVE PROXY: ") + proxy);
+                    }
+                    ::closesocket(s);
+                }
+            }
+        }
+    };
+
+    std::vector<std::thread> hunters;
+    int chunk = scan_count / 8;
+    for (int i = 0; i < 8; ++i) {
+        int end = (i == 7) ? scan_count : (i + 1) * chunk;
+        hunters.emplace_back(worker, i * chunk, end);
+    }
+
+    for (auto& t : hunters) t.join();
+
+    WSACleanup();
+
+    char summary[128];
+    wsprintfA(summary, "Found %d live proxies!", live_proxies.load());
+    log_line(summary);
+    log_line("--- PROXY DISCOVERY COMPLETE ---");
 }
 
 void gui::start_scan() {
@@ -266,6 +344,10 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             340, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, (HMENU)27, hinst, NULL);
         g_btn_proxy_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             395, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, (HMENU)28, hinst, NULL);
+        g_edt_proxy_range = CreateWindowA("EDIT", "1000", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+            450, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, NULL, hinst, NULL);
+        g_btn_proxy_find = CreateWindowA("BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            500, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 90, 25, h, (HMENU)29, hinst, NULL);
 
         // ROW 4: PORTS LISTBOX (same row_y as proxies)
         CreateWindowA("STATIC", "Ports:", WS_CHILD | WS_VISIBLE, 455, row_y, 45, 22, h, NULL, hinst, NULL);
@@ -426,6 +508,11 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             if (g_lst_proxy)
                 scanner::load_proxies(g_lst_proxy, exe_dir() + "\\proxies.txt",
                     [](const std::string& line) { gui::log_line(line); });
+            return 0;
+        }
+
+        if (id == 29) {  // FIND PROXIES
+            gui::find_proxies();
             return 0;
         }
 

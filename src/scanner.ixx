@@ -57,6 +57,7 @@ export namespace scanner
         static std::vector<ProbeResult> run(
             const std::vector<Target>& targets,
             std::string_view override_path);
+        static ProbeResult probe_with_proxy(const Target& target, const std::string& proxy);
     };
 
     // ----- NEW GUI-INTEGRATION API (GUI-PASSIVE) -----
@@ -70,7 +71,8 @@ export namespace scanner
         std::atomic<bool>* running,
         std::mt19937& rng,      // PASS RNG FROM GUI
         const std::function<std::string()>& exe_dir_cb,  // PASS EXE DIR CALLBACK
-        const std::function<void(int, const std::vector<uint16_t>&)>& preview_cb);  // PASS PREVIEW CALLBACK
+        const std::function<void(int, const std::vector<uint16_t>&)>& preview_cb,
+        std::function<void()> finish_cb = {});  // PASS PREVIEW CALLBACK
 
     // ----- YOUR EXISTING IMPLEMENTATION (unchanged) -----
     inline void trim(std::string& s)
@@ -142,6 +144,23 @@ export namespace scanner
             results.push_back(std::move(r));
         }
         return results;
+    }
+
+    inline ProbeResult Scanner::probe_with_proxy(const Target& target, const std::string& proxy)
+    {
+        ProbeResult r{};
+        r.target = target;
+
+        if (proxy.empty()) {
+            auto results = Scanner::run({ target }, "/");
+            if (!results.empty()) return results[0];
+            r.response.status_code = -10;
+            r.response.status_line = "no response";
+            return r;
+        }
+
+        r.response.status_line = "Proxy support WIP";
+        return r;
     }
 
     // ----- NEW: PROXY/PORTS LISTBOX FUNCTIONS (ASCII ONLY) -----
@@ -329,10 +348,10 @@ void test_proxies(HWND listbox, std::function<void(const std::string&)> log_cb) 
         auto worker = [&](size_t start, size_t end) {
             for (size_t i = start; i < end; ++i) {
                 if (running && !running->load()) break;  // ⭐ INSTANT STOP
-                auto result = Scanner::run({ targets[i] }, "/");
-                if (!result.empty() && result[0].response.status_code != -10) {
+                auto result = Scanner::probe_with_proxy(targets[i], proxy);
+                if (result.response.status_code != -10) {
                     std::lock_guard<std::mutex> lock(results_mutex);
-                    results.push_back(result[0]);
+                    results.push_back(result);
                 }
                 completed.fetch_add(1);
                 progress_cb(completed.load(), (int)targets.size());

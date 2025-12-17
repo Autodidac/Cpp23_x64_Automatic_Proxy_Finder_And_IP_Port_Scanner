@@ -30,4 +30,5 @@ if (MSVC)
         /permissive-
         /Zc:preprocessor
     )
+    target_link_options(InternetScanner PRIVATE /SUBSYSTEM:WINDOWS)
 endif()

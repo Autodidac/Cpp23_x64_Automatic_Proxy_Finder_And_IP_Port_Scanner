@@ -1,4 +1,4 @@
-# InternetScanner23 (fixed)
+# InternetScanner23
 
 A small, single-threaded HTTP/1.1 probe (plain TCP, **no TLS**) intended for controlled testing on targets you own or have explicit permission to test.
 
@@ -24,10 +24,7 @@ cmake --build build
 
 ## Run
 
-```powershell
-./build/InternetScanner.exe --targets targets.txt
-./build/InternetScanner.exe --targets targets.txt --port 80 --path /health
-```
+This application now ships as a GUI-only tool. After building, launch the generated executable (e.g., `build/InternetScanner.exe` on Windows) directly. Command-line arguments are ignored.
 
 ## Targets file format
 
@@ -41,4 +38,4 @@ Blank lines and lines starting with `#` are ignored.
 
 ## Versioning
 
-The current application version is tracked in the root `VERSION` file and exposed to the codebase via the `version.ixx` module (`app_version::VERSION` and `app_version::TITLE`). Update both when cutting a new release so the window title and documentation stay in sync.
+The current application version is tracked in the root `VERSION` file and exposed to the codebase via the `version.ixx` module (`app_version::version()` and `app_version::title()`). Update both when cutting a new release so the window title and documentation stay in sync.

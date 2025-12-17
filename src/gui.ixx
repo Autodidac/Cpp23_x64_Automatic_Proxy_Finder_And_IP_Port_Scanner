@@ -44,7 +44,7 @@ export namespace gui
     inline HWND g_lbl_ports_header = nullptr, g_lbl_port_label = nullptr;
 
     inline HWND g_grp_info = nullptr, g_grp_targets = nullptr, g_grp_proxies = nullptr, g_grp_ports = nullptr;
-    inline HWND g_grp_scan = nullptr, g_grp_output = nullptr;
+    inline HWND g_grp_output = nullptr;
 
     inline int g_prog_y = 0;
     inline int g_status_y = 0;
@@ -523,6 +523,7 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         const int col_gap = 12;
         const int column_width = (content_width - col_gap) / 2;
         const int manage_height = 270;
+        const int target_height = 150;
 
         int top = margin;
 
@@ -538,7 +539,7 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         top += header_height + section_spacing;
 
         g_grp_targets = CreateWindowA("BUTTON", "Target Setup", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin, top, content_width, 112, h, NULL, hinst, NULL);
+            margin, top, content_width, target_height, h, NULL, hinst, NULL);
         int inner_left = margin + GROUP_PADDING;
         int inner_top = top + GROUP_PADDING + 2;
 
@@ -571,7 +572,16 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         g_btn_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             inner_left + 580, inner_top - 2, 80, ctrl_height + 2, h, (HMENU)4, hinst, NULL);
 
-        top += 112 + section_spacing;
+        inner_top += line_height + 12;
+        g_btn_scan = CreateWindowA("BUTTON", "START SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
+            inner_left, inner_top - 2, 120, ctrl_height + 2, h, (HMENU)5, hinst, NULL);
+        g_btn_stop = CreateWindowA("BUTTON", "STOP SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            inner_left + 130, inner_top - 2, 120, ctrl_height + 2, h, (HMENU)1, hinst, NULL);
+        g_btn_clear = CreateWindowA("BUTTON", "Clear Log", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            inner_left + 260, inner_top - 2, 120, ctrl_height + 2, h, (HMENU)6, hinst, NULL);
+        EnableWindow(g_btn_stop, FALSE);
+
+        top += target_height + section_spacing;
 
         g_grp_proxies = CreateWindowA("BUTTON", "Proxy Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin, top, column_width, manage_height, h, NULL, hinst, NULL);
@@ -633,21 +643,6 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             ports_add_left + ports_layout.button_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, h, (HMENU)26, hinst, NULL);
 
         top += manage_height + section_spacing;
-
-        g_grp_scan = CreateWindowA("BUTTON", "Scan Controls", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin, top, content_width, 74, h, NULL, hinst, NULL);
-        int scan_left = margin + GROUP_PADDING;
-        int scan_top = top + GROUP_PADDING + 6;
-
-        g_btn_scan = CreateWindowA("BUTTON", "START SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
-            scan_left, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)5, hinst, NULL);
-        g_btn_stop = CreateWindowA("BUTTON", "STOP SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            scan_left + 130, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)1, hinst, NULL);
-        g_btn_clear = CreateWindowA("BUTTON", "Clear Log", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            scan_left + 260, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)6, hinst, NULL);
-        EnableWindow(g_btn_stop, FALSE);
-
-        top += 74 + section_spacing;
 
         g_output_top = top;
         g_output_group_height = rc.bottom - g_output_top - margin;
@@ -836,7 +831,7 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (g_grp_info) MoveWindow(g_grp_info, margin, top, content_width, header_height, TRUE);
         top += header_height + section_spacing;
 
-        int target_height = 112;
+        int target_height = 150;
         if (g_grp_targets) MoveWindow(g_grp_targets, margin, top, content_width, target_height, TRUE);
         top += target_height + section_spacing;
 
@@ -887,10 +882,6 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         int ports_add_left = ports_layout.left + ports_layout.label_width + ports_layout.hgap + ports_layout.input_width + ports_layout.hgap;
         if (g_btn_ports_add) MoveWindow(g_btn_ports_add, ports_add_left, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, TRUE);
         if (g_btn_ports_remove) MoveWindow(g_btn_ports_remove, ports_add_left + ports_layout.button_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, TRUE);
-
-        int scan_height = 74;
-        if (g_grp_scan) MoveWindow(g_grp_scan, margin, top, content_width, scan_height, TRUE);
-        top += scan_height + section_spacing;
 
         g_output_top = top;
         g_output_group_height = rc.bottom - g_output_top - margin;

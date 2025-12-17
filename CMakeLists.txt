@@ -16,8 +16,9 @@ target_sources(InternetScanner
             src/httpme.ixx
             src/urlme.ixx
             src/scanner.ixx
- 	src/gui.ixx
- 	src/ports.ixx
+            src/version.ixx
+        src/gui.ixx
+        src/ports.ixx
 
 )
 

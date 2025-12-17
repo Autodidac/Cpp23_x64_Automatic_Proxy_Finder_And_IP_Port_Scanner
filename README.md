@@ -38,3 +38,7 @@ One entry per line:
 - `http://example.com/path?x=y`
 
 Blank lines and lines starting with `#` are ignored.
+
+## Versioning
+
+The current application version is tracked in the root `VERSION` file and exposed to the codebase via the `version.ixx` module (`app_version::VERSION` and `app_version::TITLE`). Update both when cutting a new release so the window title and documentation stay in sync.

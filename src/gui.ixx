@@ -19,6 +19,7 @@ export module gui;
 
 import scanner;
 import ports;
+import version;
 
 #pragma comment(lib, "Comctl32.lib")
 #pragma comment(lib, "ws2_32.lib")
@@ -38,6 +39,10 @@ export namespace gui
     inline HWND g_btn_ports_add = nullptr, g_btn_ports_remove = nullptr, g_btn_proxy_save = nullptr, g_btn_proxy_load = nullptr;
     inline HWND g_btn_proxy_find = nullptr;
     inline HWND g_edt_proxy_range = nullptr;
+
+    inline int g_prog_y = 0;
+    inline int g_status_y = 0;
+    inline int g_log_y = 0;
 
     inline std::atomic<bool> g_running{ false };
     inline std::mt19937 g_rng(std::random_device{}());
@@ -293,101 +298,158 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
     switch (m) {
     case WM_CREATE: {
-        int row_y = 5, ROW_SPACING = 32, CONTROL_Y_OFFSET = -2;
+        RECT rc{}; GetClientRect(h, &rc);
+        const int margin = 10;
+        const int section_spacing = 12;
+        const int line_height = 22;
+        const int ctrl_height = 24;
+        const int content_width = rc.right - rc.left - (margin * 2);
+        const int col_gap = 12;
+        const int column_width = (content_width - col_gap) / 2;
 
-        // ROW 0: TITLE
-        CreateWindowA("STATIC", "Automatic Proxy Finder and IP/Port Scanner",
-            WS_CHILD | WS_VISIBLE | SS_CENTER, 10, row_y, 900, 28, h, NULL, hinst, NULL);
-        row_y += ROW_SPACING;
+        int top = margin;
 
-        // ROW 1: Targets + Threads + Delay
-        CreateWindowA("STATIC", "Target Count:", WS_CHILD | WS_VISIBLE, 10, row_y, 101, 22, h, NULL, hinst, NULL);
+        CreateWindowA("STATIC", app_version::TITLE, WS_CHILD | WS_VISIBLE | SS_CENTER,
+            margin, top, content_width, line_height + 4, h, NULL, hinst, NULL);
+        top += line_height + 8;
+
+        HWND grp_setup = CreateWindowA("BUTTON", "Scan Setup", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+            margin, top, content_width, 98, h, NULL, hinst, NULL);
+        int inner_left = margin + 12;
+        int inner_top = top + 22;
+
+        (void)grp_setup;
+
+        int x = inner_left;
+        CreateWindowA("STATIC", "Target Count:", WS_CHILD | WS_VISIBLE, x, inner_top, 95, line_height, h, NULL, hinst, NULL);
         g_edt_ips = CreateWindowA("EDIT", "10", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            115, row_y + CONTROL_Y_OFFSET, 60, 25, h, NULL, hinst, NULL);
-        CreateWindowA("STATIC", "Threads:", WS_CHILD | WS_VISIBLE, 185, row_y, 63, 22, h, NULL, hinst, NULL);
+            x + 98, inner_top - 2, 80, ctrl_height, h, NULL, hinst, NULL);
+
+        x += 200;
+        CreateWindowA("STATIC", "Threads:", WS_CHILD | WS_VISIBLE, x, inner_top, 75, line_height, h, NULL, hinst, NULL);
         g_edt_threads = CreateWindowA("EDIT", "2", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            250, row_y + CONTROL_Y_OFFSET, 40, 25, h, NULL, hinst, NULL);
-        CreateWindowA("STATIC", "Delay:", WS_CHILD | WS_VISIBLE, 300, row_y, 50, 22, h, NULL, hinst, NULL);
+            x + 78, inner_top - 2, 60, ctrl_height, h, NULL, hinst, NULL);
+
+        x += 170;
+        CreateWindowA("STATIC", "Delay (ms):", WS_CHILD | WS_VISIBLE, x, inner_top, 80, line_height, h, NULL, hinst, NULL);
         g_edt_delay = CreateWindowA("EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            355, row_y + CONTROL_Y_OFFSET, 55, 25, h, NULL, hinst, NULL);
-        row_y += ROW_SPACING;
+            x + 83, inner_top - 2, 70, ctrl_height, h, NULL, hinst, NULL);
 
-        // ROW 2: Random + File
+        inner_top += line_height + 10;
         g_chk_random = CreateWindowA("BUTTON", "Random IPs", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-            10, row_y + CONTROL_Y_OFFSET, 101, 25, h, (HMENU)10, hinst, NULL);
+            inner_left, inner_top - 2, 110, ctrl_height, h, (HMENU)10, hinst, NULL);
         SendMessageA(g_chk_random, BM_SETCHECK, BST_CHECKED, 0);
-        CreateWindowA("STATIC", "Target File:", WS_CHILD | WS_VISIBLE, 115, row_y, 80, 22, h, NULL, hinst, NULL);
+
+        CreateWindowA("STATIC", "Target File:", WS_CHILD | WS_VISIBLE, inner_left + 130, inner_top, 80, line_height, h, NULL, hinst, NULL);
         g_edt_path = CreateWindowA("EDIT", "targets.txt", WS_CHILD | WS_VISIBLE | WS_BORDER,
-            200, row_y + CONTROL_Y_OFFSET, 135, 25, h, NULL, hinst, NULL);
+            inner_left + 215, inner_top - 2, 180, ctrl_height, h, NULL, hinst, NULL);
         g_btn_gen = CreateWindowA("BUTTON", "Generate", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            340, row_y + CONTROL_Y_OFFSET, 85, 28, h, (HMENU)2, hinst, NULL);
+            inner_left + 400, inner_top - 2, 90, ctrl_height + 2, h, (HMENU)2, hinst, NULL);
         g_btn_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            430, row_y + CONTROL_Y_OFFSET, 70, 28, h, (HMENU)3, hinst, NULL);
+            inner_left + 495, inner_top - 2, 80, ctrl_height + 2, h, (HMENU)3, hinst, NULL);
         g_btn_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            505, row_y + CONTROL_Y_OFFSET, 70, 28, h, (HMENU)4, hinst, NULL);
-        g_btn_common_ports = CreateWindowA("BUTTON", "Common", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            580, row_y + CONTROL_Y_OFFSET, 70, 28, h, (HMENU)12, hinst, NULL);
-        row_y += ROW_SPACING;
-        // ROW 3: PROXY LISTBOX (218px tall total)
-        CreateWindowA("STATIC", "Proxies:", WS_CHILD | WS_VISIBLE, 10, row_y, 60, 22, h, NULL, hinst, NULL);
+            inner_left + 580, inner_top - 2, 80, ctrl_height + 2, h, (HMENU)4, hinst, NULL);
+
+        top += 98 + section_spacing;
+
+        HWND grp_proxies = CreateWindowA("BUTTON", "Proxy Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+            margin, top, column_width, 240, h, NULL, hinst, NULL);
+        int proxy_left = margin + 12;
+        int proxy_top = top + 24;
+
+        (void)grp_proxies;
+
+        CreateWindowA("STATIC", "Available Proxies:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, column_width - 30, line_height, h, NULL, hinst, NULL);
+        proxy_top += line_height;
         g_lst_proxy = CreateWindowA("LISTBOX", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
-            10, row_y + CONTROL_Y_OFFSET + ROW_SPACING, 200, 85, h, (HMENU)20, hinst, NULL);
+            proxy_left, proxy_top, column_width - 24, 120, h, (HMENU)20, hinst, NULL);
+        proxy_top += 126;
 
+        CreateWindowA("STATIC", "Random Range:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, 95, line_height, h, NULL, hinst, NULL);
         g_edt_proxy_range = CreateWindowA("EDIT", "1000", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            250, row_y + CONTROL_Y_OFFSET + 40 + ROW_SPACING, 40, 25, h, NULL, hinst, NULL);
+            proxy_left + 100, proxy_top - 2, 70, ctrl_height, h, NULL, hinst, NULL);
         g_btn_proxy_find = CreateWindowA("BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            300, row_y + CONTROL_Y_OFFSET + 40 + ROW_SPACING, 85, 25, h, (HMENU)29, hinst, NULL);
+            proxy_left + 175, proxy_top - 2, 115, ctrl_height + 2, h, (HMENU)29, hinst, NULL);
+        proxy_top += line_height + 12;
 
+        CreateWindowA("STATIC", "Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, 50, line_height, h, NULL, hinst, NULL);
         g_edt_proxy_test = CreateWindowA("EDIT", "", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
-            10, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 140, 25, h, NULL, hinst, NULL);
+            proxy_left + 55, proxy_top - 2, 150, ctrl_height, h, NULL, hinst, NULL);
         g_btn_proxy_add = CreateWindowA("BUTTON", "Add", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            155, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, (HMENU)21, hinst, NULL);
+            proxy_left + 210, proxy_top - 2, 75, ctrl_height + 2, h, (HMENU)21, hinst, NULL);
         g_btn_proxy_remove = CreateWindowA("BUTTON", "Remove", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            210, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 60, 25, h, (HMENU)22, hinst, NULL);
+            proxy_left + 290, proxy_top - 2, 85, ctrl_height + 2, h, (HMENU)22, hinst, NULL);
+        proxy_top += line_height + 12;
+
         g_btn_proxy_scan = CreateWindowA("BUTTON", "Scan", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            275, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 60, 25, h, (HMENU)23, hinst, NULL);
+            proxy_left, proxy_top - 2, 80, ctrl_height + 2, h, (HMENU)23, hinst, NULL);
         g_btn_proxy_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            340, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, (HMENU)27, hinst, NULL);
+            proxy_left + 85, proxy_top - 2, 80, ctrl_height + 2, h, (HMENU)27, hinst, NULL);
         g_btn_proxy_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            395, row_y + CONTROL_Y_OFFSET + 88 + ROW_SPACING, 50, 25, h, (HMENU)28, hinst, NULL);
+            proxy_left + 170, proxy_top - 2, 80, ctrl_height + 2, h, (HMENU)28, hinst, NULL);
 
+        HWND grp_ports = CreateWindowA("BUTTON", "Port Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+            margin + column_width + col_gap, top, column_width, 240, h, NULL, hinst, NULL);
+        int port_left = margin + column_width + col_gap + 12;
+        int port_top = top + 24;
 
-        // ROW 4: PORTS LISTBOX (same row_y as proxies)
-        CreateWindowA("STATIC", "Ports:", WS_CHILD | WS_VISIBLE, 455, row_y, 45, 22, h, NULL, hinst, NULL);
-        row_y += ROW_SPACING;
+        (void)grp_ports;
+
+        CreateWindowA("STATIC", "Ports to Scan:", WS_CHILD | WS_VISIBLE, port_left, port_top, column_width - 30, line_height, h, NULL, hinst, NULL);
+        port_top += line_height;
         g_lst_ports = CreateWindowA("LISTBOX", std::string(ports::COMMON_PORTS).c_str(),
             WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
-            455, row_y + CONTROL_Y_OFFSET, 160, 85, h, (HMENU)24, hinst, NULL);
-        g_edt_ports = CreateWindowA("EDIT", "8080", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            455, row_y + CONTROL_Y_OFFSET + 88, 60, 25, h, NULL, hinst, NULL);
-        g_btn_ports_add = CreateWindowA("BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            520, row_y + CONTROL_Y_OFFSET + 88, 25, 25, h, (HMENU)25, hinst, NULL);
-        g_btn_ports_remove = CreateWindowA("BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            550, row_y + CONTROL_Y_OFFSET + 88, 25, 25, h, (HMENU)26, hinst, NULL);
+            port_left, port_top, column_width - 24, 120, h, (HMENU)24, hinst, NULL);
+        port_top += 126;
 
-        // ⭐ ROW 5: START/STOP SCAN (next row after listboxes)
-        row_y += 120;  // 85px listbox + 25px edit + 10px gap = 120px
-        CreateWindowA("STATIC", "SCAN CONTROLS:", WS_CHILD | WS_VISIBLE, 10, row_y, 125, 22, h, NULL, hinst, NULL);
+        g_btn_common_ports = CreateWindowA("BUTTON", "Load Common", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            port_left, port_top - 2, 110, ctrl_height + 2, h, (HMENU)12, hinst, NULL);
+        port_top += line_height + 10;
+
+        CreateWindowA("STATIC", "Port:", WS_CHILD | WS_VISIBLE, port_left, port_top, 45, line_height, h, NULL, hinst, NULL);
+        g_edt_ports = CreateWindowA("EDIT", "8080", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+            port_left + 50, port_top - 2, 80, ctrl_height, h, NULL, hinst, NULL);
+        g_btn_ports_add = CreateWindowA("BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            port_left + 135, port_top - 2, 45, ctrl_height + 2, h, (HMENU)25, hinst, NULL);
+        g_btn_ports_remove = CreateWindowA("BUTTON", "-", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            port_left + 185, port_top - 2, 45, ctrl_height + 2, h, (HMENU)26, hinst, NULL);
+
+        top += 240 + section_spacing;
+
+        HWND grp_scan = CreateWindowA("BUTTON", "Scan Controls", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
+            margin, top, content_width, 74, h, NULL, hinst, NULL);
+        int scan_left = margin + 12;
+        int scan_top = top + 26;
+
+        (void)grp_scan;
+
         g_btn_scan = CreateWindowA("BUTTON", "START SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
-            210, row_y, 110, 28, h, (HMENU)5, hinst, NULL);
+            scan_left, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)5, hinst, NULL);
         g_btn_stop = CreateWindowA("BUTTON", "STOP SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            325, row_y, 110, 28, h, (HMENU)1, hinst, NULL);
+            scan_left + 130, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)1, hinst, NULL);
         g_btn_clear = CreateWindowA("BUTTON", "Clear Log", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            440, row_y, 110, 28, h, (HMENU)6, hinst, NULL);
+            scan_left + 260, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)6, hinst, NULL);
         EnableWindow(g_btn_stop, FALSE);
 
-        // PROGRESS + LOG (final section)
-        g_prog = CreateWindowA(PROGRESS_CLASS, "", WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
-            10, row_y, 880, 22, h, NULL, hinst, NULL);
-        g_lbl_status = CreateWindowA("STATIC", "Ready - Proxy/Ports Listboxes Active", WS_CHILD | WS_VISIBLE,
-            10, row_y + 58, 880, 22, h, NULL, hinst, NULL);
+        top += 74 + section_spacing;
 
+        g_prog_y = top;
+        g_status_y = g_prog_y + 28;
+        g_log_y = g_status_y + 26;
+
+        g_prog = CreateWindowA(PROGRESS_CLASS, "", WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+            margin, g_prog_y, content_width, 22, h, NULL, hinst, NULL);
+        g_lbl_status = CreateWindowA("STATIC", "Ready - Configure targets, proxies, and ports", WS_CHILD | WS_VISIBLE,
+            margin, g_status_y, content_width, line_height, h, NULL, hinst, NULL);
+
+        int log_height = rc.bottom - g_log_y - margin;
+        if (log_height < 120) log_height = 120;
         g_log = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT",
             "PROXIES: Add/Remove/Scan/Save/Load listbox\r\n"
             "PORTS: Add/Remove from listbox (+/- buttons)\r\n"
-            "Common fills ports listbox, Scan tests proxies",
+            "TARGETS: Configure counts, delays, and files above",
             WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL,
-            10, row_y + 55, 880, 350, h, NULL, hinst, NULL);
+            margin, g_log_y, content_width, log_height, h, NULL, hinst, NULL);
 
         break;
     }
@@ -524,9 +586,9 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
     case WM_SIZE: {
         RECT rc; GetClientRect(h, &rc);
-        if (g_log) MoveWindow(g_log, 10, 330, rc.right - 20, rc.bottom - 340, TRUE);
-        if (g_prog) MoveWindow(g_prog, 10, 290, rc.right - 20, 22, TRUE);
-      //  if (g_btn_clear) MoveWindow(g_btn_clear, 10, rc.bottom - 35, 85, 28, TRUE);
+        if (g_prog) MoveWindow(g_prog, 10, g_prog_y, rc.right - 20, 22, TRUE);
+        if (g_lbl_status) MoveWindow(g_lbl_status, 10, g_status_y, rc.right - 20, 22, TRUE);
+        if (g_log) MoveWindow(g_log, 10, g_log_y, rc.right - 20, rc.bottom - g_log_y - 10, TRUE);
         break;
     }
 

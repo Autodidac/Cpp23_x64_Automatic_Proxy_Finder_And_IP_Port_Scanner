@@ -1,7 +1,8 @@
 ﻿// main.cpp
 #include <windows.h>
-#include <commctrl.h> 
+#include <commctrl.h>
 import gui;
+import version;
 
 int WINAPI WinMain(HINSTANCE hi, HINSTANCE, LPSTR, int) {
     INITCOMMONCONTROLSEX ic = { sizeof(ic), ICC_STANDARD_CLASSES | ICC_PROGRESS_CLASS };
@@ -18,7 +19,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE, LPSTR, int) {
 
     RegisterClassA(&wc);
 
-    HWND h = CreateWindowExA(WS_EX_APPWINDOW, wc.lpszClassName, "InternetScanner",
+    HWND h = CreateWindowExA(WS_EX_APPWINDOW, wc.lpszClassName, app_version::TITLE,
         WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 900, 700,
         NULL, NULL, hi, NULL);
 

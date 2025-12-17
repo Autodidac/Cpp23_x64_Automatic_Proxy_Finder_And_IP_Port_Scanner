@@ -189,22 +189,71 @@ void gui::find_proxies() {
             return;
         }
 
+        auto wait_for_connect = [](SOCKET s, DWORD timeout_ms) {
+            constexpr DWORD SLICE_MS = 300;
+            DWORD waited = 0;
+            while (waited < timeout_ms && g_proxy_searching.load()) {
+                WSAPOLLFD pfd{};
+                pfd.fd = s;
+                pfd.events = POLLOUT;
+                int poll_res = WSAPoll(&pfd, 1, static_cast<INT>(std::min<DWORD>(SLICE_MS, timeout_ms - waited)));
+                if (poll_res > 0) {
+                    if (pfd.revents & POLLOUT) {
+                        int so_error = 0;
+                        int optlen = sizeof(so_error);
+                        if (getsockopt(s, SOL_SOCKET, SO_ERROR, (char*)&so_error, &optlen) == 0 && so_error == 0) {
+                            return true;
+                        }
+                        return false;
+                    }
+                    if (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                        return false;
+                    }
+                }
+                else if (poll_res == SOCKET_ERROR) {
+                    return false;
+                }
+
+                waited += SLICE_MS;
+            }
+            return false;
+        };
+
         auto worker = [&](int start, int end) {
             thread_local std::mt19937 rng_local{ std::random_device{}() };
             std::uniform_int_distribution<int> dist(1, 254);
-            for (int i = start; i < end; ++i) {
+            for (int i = start; i < end && g_proxy_searching.load(); ++i) {
                 char ip[16];
                 wsprintfA(ip, "%d.%d.%d.%d", dist(rng_local), dist(rng_local), dist(rng_local), dist(rng_local));
 
                 for (uint16_t port : proxy_ports) {
+                    if (!g_proxy_searching.load()) break;
                     SOCKET s = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
                     if (s != INVALID_SOCKET) {
+                        u_long mode = 1;
+                        if (ioctlsocket(s, FIONBIO, &mode) == SOCKET_ERROR) {
+                            ::closesocket(s);
+                            continue;
+                        }
+
                         sockaddr_in addr{};
                         addr.sin_family = AF_INET;
                         addr.sin_port = htons(port);
                         inet_pton(AF_INET, ip, &addr.sin_addr);
 
-                        if (::connect(s, (sockaddr*)&addr, sizeof(addr)) == 0) {
+                        bool connected = false;
+                        int result = ::connect(s, (sockaddr*)&addr, sizeof(addr));
+                        if (result == 0) {
+                            connected = true;
+                        }
+                        else {
+                            int err = WSAGetLastError();
+                            if (err == WSAEWOULDBLOCK || err == WSAEINPROGRESS) {
+                                connected = wait_for_connect(s, 2500);
+                            }
+                        }
+
+                        if (connected) {
                             std::lock_guard<std::mutex> lock(proxy_mutex);
                             char proxy[64];
                             wsprintfA(proxy, "%s:%u", ip, port);

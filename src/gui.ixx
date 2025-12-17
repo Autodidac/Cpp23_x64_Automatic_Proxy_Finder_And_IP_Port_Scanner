@@ -156,7 +156,7 @@ void gui::find_proxies() {
 
     char buf[32];
     GetWindowTextA(g_edt_proxy_range, buf, sizeof(buf));
-    int scan_count = std::max(100, std::min(5000, atoi(buf[0] ? buf : "1000")));
+    int scan_count = std::max(1, std::min(5000, atoi(buf[0] ? buf : "100")));
 
     log_line("--- PROXY DISCOVERY STARTED ---");
     log_line(std::string("Scanning ") + std::to_string(scan_count) + " random IPs on common proxy ports...");
@@ -315,17 +315,13 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
         int top = margin;
 
-        std::string section_header = app_version::title() + "  |  Targets • Proxies • Ports • Output";
-        g_grp_info = CreateWindowA("BUTTON", "Application Details", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin, top, content_width, (line_height * 2) + (GROUP_PADDING * 2), h, NULL, hinst, NULL);
+        std::string section_header = app_version::title() + "  \r\n  Targets • Proxies • Ports • Output";
+
         int info_left = margin + GROUP_PADDING;
-        int info_top = top + GROUP_PADDING + 2;
+        int info_top = top;
         CreateWindowA("STATIC", section_header.c_str(), WS_CHILD | WS_VISIBLE | SS_CENTER,
-            info_left, info_top, content_width - (GROUP_PADDING * 2), line_height + 4, h, NULL, hinst, NULL);
-        info_top += line_height + 6;
-        CreateWindowA("STATIC", "Versioned scanner sections below keep configuration organized.",
-            WS_CHILD | WS_VISIBLE | SS_CENTER,
-            info_left, info_top, content_width - (GROUP_PADDING * 2), line_height, h, NULL, hinst, NULL);
+            info_left, info_top, content_width - (GROUP_PADDING * 2), line_height + 24, h, NULL, hinst, NULL);
+
 
         int header_height = (line_height * 2) + (GROUP_PADDING * 2);
         top += header_height + section_spacing;
@@ -385,15 +381,15 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             proxy_left, proxy_top, proxy_inner_width, 120, h, (HMENU)20, hinst, NULL);
         proxy_top += 120 + 8;
 
-        CreateWindowA("STATIC", "Random Range:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, 95, line_height, h, NULL, hinst, NULL);
-        g_edt_proxy_range = CreateWindowA("EDIT", "1000", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            proxy_left + 100, proxy_top - 2, 80, ctrl_height, h, NULL, hinst, NULL);
+        CreateWindowA("STATIC", "Random Range:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, 115, line_height, h, NULL, hinst, NULL);
+        g_edt_proxy_range = CreateWindowA("EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
+            proxy_left + 160, proxy_top - 2, 50, ctrl_height, h, NULL, hinst, NULL);
         g_btn_proxy_find = CreateWindowA("BUTTON", "Find Proxies", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + 190, proxy_top - 2, proxy_find_width, proxy_btn_height, h, (HMENU)29, hinst, NULL);
+            proxy_left + 240, proxy_top - 2, proxy_find_width - 70, proxy_btn_height, h, (HMENU)29, hinst, NULL);
         proxy_top += line_height + 6;
 
         CreateWindowA("STATIC", "Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, 50, line_height, h, NULL, hinst, NULL);
-        g_edt_proxy_test = CreateWindowA("EDIT", "127.0.0.1:8080", WS_CHILD | WS_VISIBLE | WS_BORDER,
+        g_edt_proxy_test = CreateWindowA("EDIT", "192.168.0.1:8080", WS_CHILD | WS_VISIBLE | WS_BORDER,
             proxy_left + 55, proxy_top - 2, proxy_input_width, ctrl_height, h, NULL, hinst, NULL);
         g_btn_proxy_add = CreateWindowA("BUTTON", "+", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             proxy_left + 55 + proxy_input_width + proxy_hgap, proxy_top - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)21, hinst, NULL);
@@ -401,14 +397,15 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             proxy_left + 55 + proxy_input_width + proxy_hgap + proxy_btn_width + proxy_hgap, proxy_top - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)22, hinst, NULL);
         proxy_top += line_height + 10;
 
-        CreateWindowA("STATIC", "Scan Selected Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, proxy_inner_width, line_height, h, NULL, hinst, NULL);
-        proxy_top += line_height;
+        CreateWindowA("STATIC", "Scan Selected Proxy:", WS_CHILD | WS_VISIBLE, proxy_left, proxy_top, proxy_inner_width - 250, line_height, h, NULL, hinst, NULL);
+        proxy_top += line_height - 20;
+        proxy_left += 160;
         g_btn_proxy_scan = CreateWindowA("BUTTON", "Test Latency", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             proxy_left, proxy_top - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)23, hinst, NULL);
         g_btn_proxy_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + proxy_btn_width + proxy_hgap, proxy_top - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)27, hinst, NULL);
+            proxy_left + proxy_btn_width + proxy_hgap, proxy_top - 2, proxy_btn_width - 40, proxy_btn_height, h, (HMENU)27, hinst, NULL);
         g_btn_proxy_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            proxy_left + (proxy_btn_width * 2) + (proxy_hgap * 2), proxy_top - 2, proxy_btn_width, proxy_btn_height, h, (HMENU)28, hinst, NULL);
+            proxy_left + proxy_btn_width + proxy_hgap + 55, proxy_top - 2, proxy_btn_width - 40, proxy_btn_height, h, (HMENU)28, hinst, NULL);
 
         g_grp_ports = CreateWindowA("BUTTON", "Port Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin + column_width + col_gap, top, column_width, manage_height, h, NULL, hinst, NULL);
@@ -476,7 +473,7 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         g_log = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT",
             "PROXIES: Add/Remove/Scan/Save/Load listbox\r\n"
             "PORTS: Add/Remove from listbox (+/- buttons)\r\n"
-            "TARGETS: Configure counts, delays, and files above",
+            "TARGETS: Configure counts, delays, and files above\r\n",
             WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL,
             output_left, g_log_y, content_width - (GROUP_PADDING * 2), log_height, h, NULL, hinst, NULL);
 

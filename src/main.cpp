@@ -23,7 +23,7 @@ int WINAPI WinMain(HINSTANCE hi, HINSTANCE, LPSTR, int) {
     std::string window_title = app_version::title();
 
     HWND h = CreateWindowExA(WS_EX_APPWINDOW, wc.lpszClassName, window_title.c_str(),
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 900, 700,
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 900, 900,
         NULL, NULL, hi, NULL);
 
     // Center window

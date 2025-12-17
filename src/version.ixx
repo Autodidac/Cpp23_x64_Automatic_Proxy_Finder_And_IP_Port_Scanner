@@ -24,7 +24,7 @@ export namespace app_version
                 return line;
             }
         }
-        return "1.0.1";
+        return "0.0.10";
     }
 
     inline const std::string& version()

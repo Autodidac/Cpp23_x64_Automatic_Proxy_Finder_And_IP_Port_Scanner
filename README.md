@@ -2,9 +2,10 @@
 
 A small, single-threaded HTTP/1.1 probe (plain TCP, **no TLS**) intended for controlled testing on targets you own or have explicit permission to test.
 
-## What's new (v0.0.10)
-- Proxy discovery keeps the UI responsive even while checking for live proxies.
-- Port management controls now resize correctly with the window so the list and buttons stay aligned inside the group box.
+## What's new (v0.0.11)
+- Target scan controls now live inside the Target Setup area for a tighter workflow.
+- Target, proxy, and port sections share a unified layout system that removes padding gaps and keeps controls aligned when resizing.
+- Version bumped to keep the window title and documentation in sync.
 
 ## Build (Visual Studio)
 

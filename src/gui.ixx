@@ -43,8 +43,10 @@ export namespace gui
     inline HWND g_lbl_proxy_input = nullptr, g_lbl_proxy_scan = nullptr;
     inline HWND g_lbl_ports_header = nullptr, g_lbl_port_label = nullptr;
 
+    inline HWND g_lbl_target_count = nullptr, g_lbl_target_threads = nullptr, g_lbl_target_delay = nullptr, g_lbl_target_file = nullptr;
+
     inline HWND g_grp_info = nullptr, g_grp_targets = nullptr, g_grp_proxies = nullptr, g_grp_ports = nullptr;
-    inline HWND g_grp_scan = nullptr, g_grp_output = nullptr;
+    inline HWND g_grp_output = nullptr;
 
     inline int g_prog_y = 0;
     inline int g_status_y = 0;
@@ -382,6 +384,26 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
     };
 
+    struct TargetLayout {
+        int left{};
+        int inner_width{};
+        int row1_top{};
+        int row2_top{};
+        int row3_top{};
+        int hgap{};
+        int label_width{};
+        int input_width{};
+        int random_width{};
+        int file_label_width{};
+        int file_input_width{};
+        int file_button_width{};
+        int button_height{};
+        int action_width{};
+        int start_left{};
+        int stop_left{};
+        int clear_left{};
+    };
+
     struct PortLayout {
         int left{};
         int inner_width{};
@@ -427,6 +449,37 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         int scan_left{};
         int save_left{};
         int load_left{};
+    };
+
+    auto compute_target_layout = [&](const RECT& group_rc, int line_height, int ctrl_height) {
+        TargetLayout layout{};
+        layout.left = group_rc.left + GROUP_PADDING;
+        int right = group_rc.right - GROUP_PADDING;
+        layout.inner_width = right - layout.left;
+
+        layout.hgap = 12;
+        layout.label_width = 95;
+        layout.input_width = 80;
+        layout.random_width = 120;
+        layout.file_label_width = 90;
+        layout.file_button_width = 100;
+        layout.button_height = ctrl_height + 2;
+
+        RowLayout rows{ group_rc.top + GROUP_PADDING + 2, 10 };
+        layout.row1_top = rows.take(ctrl_height);
+        layout.row2_top = rows.take(ctrl_height);
+        layout.row3_top = rows.take(layout.button_height);
+
+        int reserved_buttons = (layout.file_button_width * 3) + (layout.hgap * 2);
+        layout.file_input_width = layout.inner_width - layout.random_width - layout.file_label_width - reserved_buttons - (layout.hgap * 4);
+        if (layout.file_input_width < 140) layout.file_input_width = 140;
+
+        int action_width = 120;
+        layout.action_width = action_width;
+        layout.start_left = layout.left;
+        layout.stop_left = layout.start_left + action_width + layout.hgap;
+        layout.clear_left = layout.stop_left + action_width + layout.hgap;
+        return layout;
     };
 
     auto compute_port_layout = [&](const RECT& group_rc, int line_height, int ctrl_height) {
@@ -537,41 +590,57 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         int header_height = (line_height * 2) + (GROUP_PADDING * 2);
         top += header_height + section_spacing;
 
+        const int target_height = 158;
         g_grp_targets = CreateWindowA("BUTTON", "Target Setup", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin, top, content_width, 112, h, NULL, hinst, NULL);
-        int inner_left = margin + GROUP_PADDING;
-        int inner_top = top + GROUP_PADDING + 2;
+            margin, top, content_width, target_height, h, NULL, hinst, NULL);
 
-        CreateWindowA("STATIC", "Target Count:", WS_CHILD | WS_VISIBLE, inner_left, inner_top, 95, line_height, h, NULL, hinst, NULL);
+        RECT targets_group_rc{ margin, top, margin + content_width, top + target_height };
+        TargetLayout target_layout = compute_target_layout(targets_group_rc, line_height, ctrl_height);
+
+        g_lbl_target_count = CreateWindowA("STATIC", "Target Count:", WS_CHILD | WS_VISIBLE,
+            target_layout.left, target_layout.row1_top, target_layout.label_width, line_height, h, NULL, hinst, NULL);
         g_edt_ips = CreateWindowA("EDIT", "10", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            inner_left + 98, inner_top - 2, 80, ctrl_height, h, NULL, hinst, NULL);
+            target_layout.left + target_layout.label_width + target_layout.hgap, target_layout.row1_top - 2, target_layout.input_width, ctrl_height, h, NULL, hinst, NULL);
 
-        int x = inner_left + 200;
-        CreateWindowA("STATIC", "Threads:", WS_CHILD | WS_VISIBLE, x, inner_top, 75, line_height, h, NULL, hinst, NULL);
+        int threads_left = target_layout.left + target_layout.label_width + target_layout.input_width + (target_layout.hgap * 2);
+        g_lbl_target_threads = CreateWindowA("STATIC", "Threads:", WS_CHILD | WS_VISIBLE,
+            threads_left, target_layout.row1_top, 80, line_height, h, NULL, hinst, NULL);
         g_edt_threads = CreateWindowA("EDIT", "2", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            x + 78, inner_top - 2, 60, ctrl_height, h, NULL, hinst, NULL);
+            threads_left + 84, target_layout.row1_top - 2, 70, ctrl_height, h, NULL, hinst, NULL);
 
-        x += 170;
-        CreateWindowA("STATIC", "Delay (ms):", WS_CHILD | WS_VISIBLE, x, inner_top, 80, line_height, h, NULL, hinst, NULL);
+        int delay_left = threads_left + 84 + 70 + (target_layout.hgap * 2);
+        g_lbl_target_delay = CreateWindowA("STATIC", "Delay (ms):", WS_CHILD | WS_VISIBLE,
+            delay_left, target_layout.row1_top, 90, line_height, h, NULL, hinst, NULL);
         g_edt_delay = CreateWindowA("EDIT", "100", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER,
-            x + 83, inner_top - 2, 70, ctrl_height, h, NULL, hinst, NULL);
+            delay_left + 93, target_layout.row1_top - 2, 80, ctrl_height, h, NULL, hinst, NULL);
 
-        inner_top += line_height + 10;
         g_chk_random = CreateWindowA("BUTTON", "Random IPs", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-            inner_left, inner_top - 2, 110, ctrl_height, h, (HMENU)10, hinst, NULL);
+            target_layout.left, target_layout.row2_top - 2, target_layout.random_width, ctrl_height, h, (HMENU)10, hinst, NULL);
         SendMessageA(g_chk_random, BM_SETCHECK, BST_CHECKED, 0);
 
-        CreateWindowA("STATIC", "Target File:", WS_CHILD | WS_VISIBLE, inner_left + 130, inner_top, 80, line_height, h, NULL, hinst, NULL);
+        int file_left = target_layout.left + target_layout.random_width + target_layout.hgap;
+        g_lbl_target_file = CreateWindowA("STATIC", "Target File:", WS_CHILD | WS_VISIBLE,
+            file_left, target_layout.row2_top, target_layout.file_label_width, line_height, h, NULL, hinst, NULL);
         g_edt_path = CreateWindowA("EDIT", "targets.txt", WS_CHILD | WS_VISIBLE | WS_BORDER,
-            inner_left + 215, inner_top - 2, 180, ctrl_height, h, NULL, hinst, NULL);
-        g_btn_gen = CreateWindowA("BUTTON", "Generate", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            inner_left + 400, inner_top - 2, 90, ctrl_height + 2, h, (HMENU)2, hinst, NULL);
-        g_btn_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            inner_left + 495, inner_top - 2, 80, ctrl_height + 2, h, (HMENU)3, hinst, NULL);
-        g_btn_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            inner_left + 580, inner_top - 2, 80, ctrl_height + 2, h, (HMENU)4, hinst, NULL);
+            file_left + target_layout.file_label_width + target_layout.hgap, target_layout.row2_top - 2, target_layout.file_input_width, ctrl_height, h, NULL, hinst, NULL);
 
-        top += 112 + section_spacing;
+        int buttons_left = file_left + target_layout.file_label_width + target_layout.hgap + target_layout.file_input_width + target_layout.hgap;
+        g_btn_gen = CreateWindowA("BUTTON", "Generate", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            buttons_left, target_layout.row2_top - 2, target_layout.file_button_width, target_layout.button_height, h, (HMENU)2, hinst, NULL);
+        g_btn_load = CreateWindowA("BUTTON", "Load", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            buttons_left + target_layout.file_button_width + target_layout.hgap, target_layout.row2_top - 2, target_layout.file_button_width, target_layout.button_height, h, (HMENU)3, hinst, NULL);
+        g_btn_save = CreateWindowA("BUTTON", "Save", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            buttons_left + (target_layout.file_button_width * 2) + (target_layout.hgap * 2), target_layout.row2_top - 2, target_layout.file_button_width, target_layout.button_height, h, (HMENU)4, hinst, NULL);
+
+        g_btn_scan = CreateWindowA("BUTTON", "START SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
+            target_layout.start_left, target_layout.row3_top - 2, target_layout.action_width, target_layout.button_height, h, (HMENU)5, hinst, NULL);
+        g_btn_stop = CreateWindowA("BUTTON", "STOP SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            target_layout.stop_left, target_layout.row3_top - 2, target_layout.action_width, target_layout.button_height, h, (HMENU)1, hinst, NULL);
+        g_btn_clear = CreateWindowA("BUTTON", "Clear Log", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            target_layout.clear_left, target_layout.row3_top - 2, target_layout.action_width, target_layout.button_height, h, (HMENU)6, hinst, NULL);
+        EnableWindow(g_btn_stop, FALSE);
+
+        top += target_height + section_spacing;
 
         g_grp_proxies = CreateWindowA("BUTTON", "Proxy Management", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
             margin, top, column_width, manage_height, h, NULL, hinst, NULL);
@@ -634,21 +703,6 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
 
         top += manage_height + section_spacing;
 
-        g_grp_scan = CreateWindowA("BUTTON", "Scan Controls", WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
-            margin, top, content_width, 74, h, NULL, hinst, NULL);
-        int scan_left = margin + GROUP_PADDING;
-        int scan_top = top + GROUP_PADDING + 6;
-
-        g_btn_scan = CreateWindowA("BUTTON", "START SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_DEFPUSHBUTTON,
-            scan_left, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)5, hinst, NULL);
-        g_btn_stop = CreateWindowA("BUTTON", "STOP SCAN", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            scan_left + 130, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)1, hinst, NULL);
-        g_btn_clear = CreateWindowA("BUTTON", "Clear Log", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            scan_left + 260, scan_top - 2, 120, ctrl_height + 2, h, (HMENU)6, hinst, NULL);
-        EnableWindow(g_btn_stop, FALSE);
-
-        top += 74 + section_spacing;
-
         g_output_top = top;
         g_output_group_height = rc.bottom - g_output_top - margin;
         if (g_output_group_height < 150) g_output_group_height = 150;
@@ -674,7 +728,7 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         g_log = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT",
             "PROXIES: Add/Remove/Scan/Save/Load listbox\r\n"
             "PORTS: Add/Remove from listbox (+/- buttons)\r\n"
-            "TARGETS: Configure counts, delays, and files above\r\n",
+            "TARGETS: Configure counts, delays, file, and scan controls above\r\n",
             WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL,
             output_left, g_log_y, content_width - (GROUP_PADDING * 2), log_height, h, NULL, hinst, NULL);
 
@@ -836,8 +890,36 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         if (g_grp_info) MoveWindow(g_grp_info, margin, top, content_width, header_height, TRUE);
         top += header_height + section_spacing;
 
-        int target_height = 112;
+        int target_height = 158;
         if (g_grp_targets) MoveWindow(g_grp_targets, margin, top, content_width, target_height, TRUE);
+        RECT targets_group_rc{ margin, top, margin + content_width, top + target_height };
+        TargetLayout target_layout = compute_target_layout(targets_group_rc, line_height, ctrl_height);
+
+        if (g_lbl_target_count) MoveWindow(g_lbl_target_count, target_layout.left, target_layout.row1_top, target_layout.label_width, line_height, TRUE);
+        if (g_edt_ips) MoveWindow(g_edt_ips, target_layout.left + target_layout.label_width + target_layout.hgap, target_layout.row1_top - 2, target_layout.input_width, ctrl_height, TRUE);
+
+        int threads_left = target_layout.left + target_layout.label_width + target_layout.input_width + (target_layout.hgap * 2);
+        if (g_lbl_target_threads) MoveWindow(g_lbl_target_threads, threads_left, target_layout.row1_top, 80, line_height, TRUE);
+        if (g_edt_threads) MoveWindow(g_edt_threads, threads_left + 84, target_layout.row1_top - 2, 70, ctrl_height, TRUE);
+
+        int delay_left = threads_left + 84 + 70 + (target_layout.hgap * 2);
+        if (g_lbl_target_delay) MoveWindow(g_lbl_target_delay, delay_left, target_layout.row1_top, 90, line_height, TRUE);
+        if (g_edt_delay) MoveWindow(g_edt_delay, delay_left + 93, target_layout.row1_top - 2, 80, ctrl_height, TRUE);
+
+        int file_left = target_layout.left + target_layout.random_width + target_layout.hgap;
+        if (g_chk_random) MoveWindow(g_chk_random, target_layout.left, target_layout.row2_top - 2, target_layout.random_width, ctrl_height, TRUE);
+        if (g_lbl_target_file) MoveWindow(g_lbl_target_file, file_left, target_layout.row2_top, target_layout.file_label_width, line_height, TRUE);
+        if (g_edt_path) MoveWindow(g_edt_path, file_left + target_layout.file_label_width + target_layout.hgap, target_layout.row2_top - 2, target_layout.file_input_width, ctrl_height, TRUE);
+
+        int buttons_left = file_left + target_layout.file_label_width + target_layout.hgap + target_layout.file_input_width + target_layout.hgap;
+        if (g_btn_gen) MoveWindow(g_btn_gen, buttons_left, target_layout.row2_top - 2, target_layout.file_button_width, target_layout.button_height, TRUE);
+        if (g_btn_load) MoveWindow(g_btn_load, buttons_left + target_layout.file_button_width + target_layout.hgap, target_layout.row2_top - 2, target_layout.file_button_width, target_layout.button_height, TRUE);
+        if (g_btn_save) MoveWindow(g_btn_save, buttons_left + (target_layout.file_button_width * 2) + (target_layout.hgap * 2), target_layout.row2_top - 2, target_layout.file_button_width, target_layout.button_height, TRUE);
+
+        if (g_btn_scan) MoveWindow(g_btn_scan, target_layout.start_left, target_layout.row3_top - 2, target_layout.action_width, target_layout.button_height, TRUE);
+        if (g_btn_stop) MoveWindow(g_btn_stop, target_layout.stop_left, target_layout.row3_top - 2, target_layout.action_width, target_layout.button_height, TRUE);
+        if (g_btn_clear) MoveWindow(g_btn_clear, target_layout.clear_left, target_layout.row3_top - 2, target_layout.action_width, target_layout.button_height, TRUE);
+
         top += target_height + section_spacing;
 
         int manage_height = 270;
@@ -887,10 +969,6 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         int ports_add_left = ports_layout.left + ports_layout.label_width + ports_layout.hgap + ports_layout.input_width + ports_layout.hgap;
         if (g_btn_ports_add) MoveWindow(g_btn_ports_add, ports_add_left, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, TRUE);
         if (g_btn_ports_remove) MoveWindow(g_btn_ports_remove, ports_add_left + ports_layout.button_width + ports_layout.hgap, ports_layout.port_row_top - 2, ports_layout.button_width, ports_layout.button_height, TRUE);
-
-        int scan_height = 74;
-        if (g_grp_scan) MoveWindow(g_grp_scan, margin, top, content_width, scan_height, TRUE);
-        top += scan_height + section_spacing;
 
         g_output_top = top;
         g_output_group_height = rc.bottom - g_output_top - margin;

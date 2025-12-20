@@ -44,8 +44,6 @@ export namespace gui
     inline HWND g_lbl_ports_header = nullptr, g_lbl_port_label = nullptr;
     inline HWND g_lbl_target_count = nullptr, g_lbl_target_threads = nullptr, g_lbl_target_delay = nullptr, g_lbl_target_file = nullptr;
 
-    inline HWND g_lbl_target_count = nullptr, g_lbl_target_threads = nullptr, g_lbl_target_delay = nullptr, g_lbl_target_file = nullptr;
-
     inline HWND g_grp_info = nullptr, g_grp_targets = nullptr, g_grp_proxies = nullptr, g_grp_ports = nullptr;
     inline HWND g_grp_output = nullptr;
 
@@ -1376,4 +1374,3 @@ LRESULT CALLBACK gui::WndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     }
     return 0;
 }
-

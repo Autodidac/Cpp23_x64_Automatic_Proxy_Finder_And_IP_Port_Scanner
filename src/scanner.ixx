@@ -173,6 +173,7 @@ void test_proxies(HWND listbox, std::function<void(const std::string&)> log_cb) 
     for (int i = 0; i < count; ++i) {
         char proxy[256];
         SendMessageA(listbox, LB_GETTEXT, i, (LPARAM)proxy);
+        std::string proxy_value = proxy;
 
         char line[512];
         wsprintfA(line, "[PROXY %d/%d] Testing %s...", i + 1, count, proxy);
@@ -181,10 +182,14 @@ void test_proxies(HWND listbox, std::function<void(const std::string&)> log_cb) 
         // ⭐ REAL PROXY TEST: Connect through proxy to google.com:80
         std::string proxy_host, proxy_port_str;
         // Parse proxy:port (simple - assumes format "host:port")
-        size_t colon = strrchr(proxy, ':') - proxy;
-        if (colon != std::string::npos) {
-            proxy_host = std::string(proxy, colon);
-            proxy_port_str = std::string(proxy + colon + 1);
+        size_t colon = proxy_value.rfind(':');
+        if (colon != std::string::npos && colon > 0 && colon + 1 < proxy_value.size()) {
+            proxy_host = proxy_value.substr(0, colon);
+            proxy_port_str = proxy_value.substr(colon + 1);
+        } else {
+            wsprintfA(line, "[PROXY %d/%d] %s -> INVALID (expected host:port)", i + 1, count, proxy);
+            log_cb(line);
+            continue;
         }
 
         // Test: proxy CONNECT google.com:80
@@ -192,28 +197,32 @@ void test_proxies(HWND listbox, std::function<void(const std::string&)> log_cb) 
         if (s != INVALID_SOCKET) {
             // Connect to proxy
             addrinfo* proxy_ai = nullptr;
-            getaddrinfo(proxy_host.c_str(), proxy_port_str.c_str(), nullptr, &proxy_ai);
-            if (proxy_ai) {
+            if (getaddrinfo(proxy_host.c_str(), proxy_port_str.c_str(), nullptr, &proxy_ai) == 0 && proxy_ai) {
                 if (::connect(s, proxy_ai->ai_addr, (int)proxy_ai->ai_addrlen) == 0) {
                     // Send CONNECT request
                     std::string connect_req = std::format(
                         "CONNECT google.com:80 HTTP/1.1\r\nHost: google.com:80\r\n\r\n");
-                    ::send(s, connect_req.data(), (int)connect_req.size(), 0);
+                    int sent = ::send(s, connect_req.data(), (int)connect_req.size(), 0);
                     
                     // Check response within 2s
                     char resp[1024];
                     int n = ::recv(s, resp, sizeof(resp) - 1, 0);
-                    resp[n] = 0;
-                    
-                    if (strstr(resp, "200") || strstr(resp, "HTTP/1.1 2")) {
-                        wsprintfA(line, "[PROXY %d/%d] %s -> LIVE", i + 1, count, proxy);
+                    if (sent <= 0 || n <= 0) {
+                        wsprintfA(line, "[PROXY %d/%d] %s -> NO RESPONSE", i + 1, count, proxy);
                     } else {
-                        wsprintfA(line, "[PROXY %d/%d] %s -> DEAD", i + 1, count, proxy);
+                        resp[n] = 0;
+                        if (strstr(resp, "200") || strstr(resp, "HTTP/1.1 2")) {
+                            wsprintfA(line, "[PROXY %d/%d] %s -> LIVE", i + 1, count, proxy);
+                        } else {
+                            wsprintfA(line, "[PROXY %d/%d] %s -> DEAD", i + 1, count, proxy);
+                        }
                     }
                 } else {
                     wsprintfA(line, "[PROXY %d/%d] %s -> CONNECT FAILED", i + 1, count, proxy);
                 }
                 freeaddrinfo(proxy_ai);
+            } else {
+                wsprintfA(line, "[PROXY %d/%d] %s -> RESOLVE FAILED", i + 1, count, proxy);
             }
             ::closesocket(s);
         } else {

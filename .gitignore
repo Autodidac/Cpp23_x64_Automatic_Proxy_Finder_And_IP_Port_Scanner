@@ -37,3 +37,4 @@ x64/*
 build-msvc/.vs/
 
 build-msvc/
+build/
